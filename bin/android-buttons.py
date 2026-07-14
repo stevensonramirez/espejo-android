@@ -190,7 +190,7 @@ def rotate():
 # la barra renace. Blindaje: lidguard y el watcher lo resetean si algo se cae.
 TABLET = {"on": False, "win": None}
 TABLET_SIZE, TABLET_DENSITY = "2560x1600", "240"   # APAISADO (nace horizontal)
-TABLET_WIN = (1150, 747)      # ventana macOS en modo tablet (contenido 16:10)
+TABLET_WIN = (1389, 901)      # ventana macOS en modo tablet (gusto del usuario)
 DEFAULT_WIN = (381, 959)      # ventana por defecto del espejo (si no hay guardada)
 
 def _launcher_pkg():

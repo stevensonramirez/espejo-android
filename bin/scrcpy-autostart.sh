@@ -31,7 +31,7 @@ HB=/data/local/tmp/scrcpy-heartbeat        # latido en el teléfono (lidguard)
 #   --stay-awake      : evita que el teléfono se duerma mientras está conectado
 #   --keyboard=uhid   : teclado físico simulado -> NO sale el teclado en pantalla
 #   --window-width    : ancho por defecto (la altura la calcula scrcpy)
-# (el ancho de ventana se decide por sesión: 1150 en modo tablet USB, 381 normal)
+# (el ancho de ventana se decide por sesión: 1389 en modo tablet USB, 381 normal)
 SCRCPY_FLAGS=(--turn-screen-off --stay-awake --keyboard=uhid
               --window-title "Android")
 
@@ -113,7 +113,7 @@ while true; do
     LPKG=$("$ADB" -s "$SER" shell cmd shortcut get-default-launcher 2>/dev/null \
              | sed -n 's/.*{\([^/}]*\)\/.*/\1/p' | head -1)
     [ -n "$LPKG" ] && "$ADB" -s "$SER" shell "am force-stop $LPKG; input keyevent 3" >/dev/null 2>&1
-    WIDTH=1150
+    WIDTH=1389
     log "modo tablet por defecto (USB): 2560x1600@240, launcher $LPKG reiniciado"
   fi
 

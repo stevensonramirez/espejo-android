@@ -534,6 +534,18 @@ for j, (sym, fb, tip, _fn) in enumerate(BOTTOM):
     if sym == "ipad.landscape":
         _tablet_btn = b
 
+# El modo tablet puede venir YA activo (el watcher lo pone por defecto en USB):
+# leer el estado real del teléfono para pintar el botón desde el arranque.
+def _sync_tablet_state():
+    try:
+        out = adb("shell", "wm", "size").stdout.decode(errors="replace")
+        TABLET["on"] = "Override" in out
+        ctl.performSelectorOnMainThread_withObject_waitUntilDone_(
+            "tintTablet:", None, False)
+    except Exception:
+        pass
+threading.Thread(target=_sync_tablet_state, daemon=True).start()
+
 # Poll adaptativo encadenado (one-shot): cada pasada agenda la siguiente con
 # el intervalo que toque — 30fps mientras el espejo se mueve, reposo si no.
 NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(

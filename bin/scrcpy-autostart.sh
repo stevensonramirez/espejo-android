@@ -31,8 +31,9 @@ HB=/data/local/tmp/scrcpy-heartbeat        # latido en el teléfono (lidguard)
 #   --stay-awake      : evita que el teléfono se duerma mientras está conectado
 #   --keyboard=uhid   : teclado físico simulado -> NO sale el teclado en pantalla
 #   --window-width    : ancho por defecto (la altura la calcula scrcpy)
+# (el ancho de ventana se decide por sesión: 1150 en modo tablet USB, 381 normal)
 SCRCPY_FLAGS=(--turn-screen-off --stay-awake --keyboard=uhid
-              --window-width=381 --window-title "Android")
+              --window-title "Android")
 
 LOG=~/Library/Logs/scrcpy-auto.log
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >>"$LOG"; }
@@ -103,6 +104,19 @@ while true; do
     [ -n "$IP" ] && echo "$IP $SER" >"$HOME/.espejo-wifi"
   fi
 
+  # Modo TABLET por defecto en USB (apaisado 2560x1600 @240; el botón 📋 de la
+  # barra lo quita/pone). Reiniciar el launcher: sin eso el dock queda roto
+  # tras el cambio de densidad. En WiFi: modo normal (más píxeles = lento).
+  WIDTH=381
+  if [ "$WIFI" = 0 ]; then
+    "$ADB" -s "$SER" shell "wm size 2560x1600; wm density 240" >/dev/null 2>&1
+    LPKG=$("$ADB" -s "$SER" shell cmd shortcut get-default-launcher 2>/dev/null \
+             | sed -n 's/.*{\([^/}]*\)\/.*/\1/p' | head -1)
+    [ -n "$LPKG" ] && "$ADB" -s "$SER" shell "am force-stop $LPKG; input keyevent 3" >/dev/null 2>&1
+    WIDTH=1150
+    log "modo tablet por defecto (USB): 2560x1600@240, launcher $LPKG reiniciado"
+  fi
+
   echo "$SER" >"$SERIAL_FILE"
   echo 0 >"$MODE_FILE"
   OPEN_ID=$(resolve_open_id)
@@ -125,7 +139,7 @@ while true; do
   ATTEMPTS=0
   while present; do
     START_TS=$(date +%s)
-    scrcpy -s "$SER" "${SCRCPY_FLAGS[@]}" >>"$LOG" 2>&1 &
+    scrcpy -s "$SER" "${SCRCPY_FLAGS[@]}" --window-width="$WIDTH" >>"$LOG" 2>&1 &
     SCRCPY_PID=$!
 
     while kill -0 "$SCRCPY_PID" 2>/dev/null && present; do

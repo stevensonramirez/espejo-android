@@ -77,6 +77,15 @@ class MenuController(NSObject):
             self.connect_item.setTitle_("Conectar espejo por WiFi")
         self.disconnect_item.setHidden_(not wifi)
 
+    # --- feedback visible junto al icono (las notificaciones pueden estar
+    # silenciadas por macOS, así que el estado se muestra en la propia barra)
+    def setBadge_(self, text):
+        item.button().setTitle_(text or "")
+
+    def _badge(self, text):
+        self.performSelectorOnMainThread_withObject_waitUntilDone_(
+            "setBadge:", text, False)
+
     # --- acciones ------------------------------------------------------------
     def connectWifi_(self, sender):
         threading.Thread(target=self._connect, daemon=True).start()
@@ -84,10 +93,13 @@ class MenuController(NSObject):
     def _connect(self):
         target = saved_target()
         if not target:
+            self._badge(" sin teléfono memorizado")
             notify("Conecta el teléfono por cable una vez para memorizarlo")
             return
+        self._badge(" buscando…")
         out = sh(ADB, "connect", target, timeout=8)
         if "connected" in out:                 # "connected to" / "already connected"
+            self._badge("")
             notify("Teléfono encontrado — abriendo el espejo…")
             return
         # ¿cambió la IP? intentar redescubrirlo por mDNS
@@ -96,6 +108,7 @@ class MenuController(NSObject):
             if len(parts) >= 3 and "_adb._tcp" in parts[1] and ":" in parts[-1]:
                 out = sh(ADB, "connect", parts[-1], timeout=8)
                 if "connected" in out:
+                    self._badge("")
                     ip = parts[-1].split(":")[0]
                     try:                        # memorizar la IP nueva
                         with open(STATE_FILE) as f:
@@ -106,8 +119,11 @@ class MenuController(NSObject):
                         pass
                     notify("Teléfono encontrado (IP nueva) — abriendo el espejo…")
                     return
+        self._badge(" no lo encuentro (¿misma red WiFi?)")
         notify("No encontré el teléfono en esta red. ¿Mismo WiFi? "
                "Si reiniciaste el teléfono, conéctalo por cable una vez.")
+        import time as _t; _t.sleep(6)
+        self._badge("")
 
     def disconnectWifi_(self, sender):
         threading.Thread(target=self._disconnect, daemon=True).start()

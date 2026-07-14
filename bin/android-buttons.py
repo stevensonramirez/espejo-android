@@ -188,18 +188,59 @@ def rotate():
 # se redimensiona sola. La pantalla física está apagada, así que no se nota;
 # el estado se verifica en el teléfono (Override) para no perder sincronía si
 # la barra renace. Blindaje: lidguard y el watcher lo resetean si algo se cae.
-TABLET = {"on": False}
-TABLET_SIZE, TABLET_DENSITY = "1600x2560", "240"
+TABLET = {"on": False, "win": None}
+TABLET_SIZE, TABLET_DENSITY = "2560x1600", "240"   # APAISADO (nace horizontal)
+TABLET_WIN = (1150, 747)      # ventana macOS en modo tablet (contenido 16:10)
+DEFAULT_WIN = (381, 959)      # ventana por defecto del espejo (si no hay guardada)
+
+def _launcher_pkg():
+    # launcher por defecto del teléfono (para reiniciarlo tras cambiar densidad)
+    out = adb("shell", "cmd", "shortcut",
+              "get-default-launcher").stdout.decode(errors="replace")
+    try:
+        return out.split("{")[1].split("/")[0]
+    except Exception:
+        return None
+
+def _restart_launcher():
+    # El launcher (p. ej. el de Moto) queda con el dock roto/imclicable al
+    # cambiar wm size/density: reiniciarlo lo re-dibuja bien al instante.
+    pkg = _launcher_pkg()
+    if pkg:
+        adb("shell", "am", "force-stop", pkg)
+        adb("shell", "input", "keyevent", "3")      # HOME -> lo relanza
+
+def _set_mirror_size(w, h):
+    osa('tell application "System Events" to tell process "scrcpy" '
+        f'to set size of window 1 to {{{w}, {h}}}')
 
 def tablet_toggle():
     def run():
+        if ":" in _serial():                        # sesión WiFi -> no
+            osa('display notification "El modo tablet solo está disponible '
+                'con cable USB (por WiFi se pone lento)." '
+                'with title "Espejo Android"')
+            return
         out = adb("shell", "wm", "size").stdout.decode(errors="replace")
-        if "Override" in out:                       # estaba en modo tablet
-            adb("shell", f"wm size reset; wm density reset")
+        if "Override" in out:                       # APAGAR: volver al real
+            adb("shell", "wm size reset; wm density reset")
             TABLET["on"] = False
-        else:
+            _restart_launcher()
+            time.sleep(1.2)                         # scrcpy re-adapta el video
+            w, h = TABLET.get("win") or DEFAULT_WIN
+            _set_mirror_size(w, h)
+        else:                                       # PRENDER: lienzo tablet
+            r = osa('tell application "System Events" to tell process '
+                    '"scrcpy" to get size of window 1')
+            try:                                    # recordar tamaño actual
+                TABLET["win"] = [int(x) for x in r.stdout.strip().split(", ")]
+            except Exception:
+                TABLET["win"] = None
             adb("shell", f"wm size {TABLET_SIZE}; wm density {TABLET_DENSITY}")
             TABLET["on"] = True
+            _restart_launcher()
+            time.sleep(1.2)
+            _set_mirror_size(*TABLET_WIN)
         try:
             ctl.performSelectorOnMainThread_withObject_waitUntilDone_(
                 "tintTablet:", None, False)

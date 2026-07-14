@@ -4,7 +4,7 @@ Conectas cualquier Android por USB al Mac y su pantalla aparece sola, con una ba
 nativa al lado; al desconectar, todo se cierra solo. En plegables (Razr) funciona incluso con la
 tapa cerrada. Además: **modo WiFi bajo demanda** desde un icono 📱 en la barra de menús (el USB
 sigue siendo automático). Repo público: **https://github.com/stevensonramirez/espejo-android**
-(v1.5.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
+(v1.5.1, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
 novia.
 
 ## 📑 Índice
@@ -124,16 +124,18 @@ Mac, con ✓ verde de confirmación), notificaciones, atrás/inicio/recientes/me
 completa, **modo tablet** y apagar pantalla. Arrastrar la barra a mano desactiva el "seguir"
 (📌 lo reactiva).
 
-**Modo tablet 📋:** el botón redimensiona el display REAL del teléfono a **1600×2560 @ 240dpi**
-(`wm size` + `wm density`) — el MISMO teléfono (tu launcher, tus apps, tus notificaciones) pero
-con lienzo y densidad de tablet (sw ≈ 1066dp → las apps usan su layout de tablet). La ventana
-del espejo se redimensiona sola; la pantalla física está apagada, así que no se nota en el
-aparato. Botón azul = activo; otro clic lo devuelve al tamaño real. El estado se lee del
-teléfono ("Override size"), así que sobrevive reinicios de la barra. **Blindaje:** lidguard
-resetea `wm size/density` si el cable/WiFi se va, y el watcher lo resetea en el teardown — el
-teléfono nunca queda con resolución rara en la mano. (Enfoque descartado: display virtual
-`--new-display` — solo mostraba el launcher secundario limitado, sin forma práctica de abrir
-cualquier app.)
+**Modo tablet 📋 (solo USB):** el botón redimensiona el display REAL del teléfono a
+**2560×1600 @ 240dpi APAISADO** (`wm size` + `wm density`) — el MISMO teléfono (tu launcher,
+tus apps, tus notificaciones) pero con lienzo horizontal y densidad de tablet (sw ≈ 1066dp →
+layout de tablet). Al activarlo: guarda el tamaño actual de la ventana, reinicia el launcher
+(sin eso el dock queda roto/imclicable tras el cambio de densidad) y agranda la ventana del
+espejo a 1150 px; al desactivarlo revierte todo y **restaura la ventana al tamaño exacto que
+tenía**. Por WiFi el botón avisa y no hace nada (encodear 4× más píxeles satura el WiFi y se
+siente lento). El estado se lee del teléfono ("Override size"), así que sobrevive reinicios de
+la barra. **Blindaje:** lidguard resetea `wm size/density` si el cable se va, y el watcher lo
+resetea en el teardown — el teléfono nunca queda con resolución rara en la mano. (Enfoque
+descartado: display virtual `--new-display` — solo mostraba el launcher secundario limitado,
+sin forma práctica de abrir cualquier app.)
 
 **Seguimiento:** un event tap (solo-escucha) de arrastre de mouse re-sincroniza la barra en cada
 evento → va a 1-2 cuadros del espejo (límite del compositor de macOS). Respaldo: polling

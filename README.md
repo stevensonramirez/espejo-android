@@ -13,7 +13,7 @@ en el teléfono para que nada quede raro si desconectas el cable).
 ## Instalar (una vez)
 
 ```bash
-git clone <URL-DE-ESTE-REPO> ~/EspejoAndroid
+git clone https://github.com/stevensonramirez/espejo-android.git ~/EspejoAndroid
 cd ~/EspejoAndroid
 ./install.sh
 ```

@@ -171,12 +171,13 @@ def screenshot():
     threading.Thread(target=run, daemon=True).start()
 
 def search_android():
-    # Búsqueda global del teléfono (intent estándar; fallback: tecla SEARCH).
+    # Buscador de APPS del launcher (el del gesto de deslizar arriba en el
+    # home), NO el de Google: abre el app drawer y ahí se puede teclear.
     def run():
-        r = adb("shell", "am", "start", "-a", "android.search.action.GLOBAL_SEARCH")
+        r = adb("shell", "am", "start", "-a", "android.intent.action.ALL_APPS")
         out = r.stdout.decode(errors="replace") if r.stdout else ""
-        if r.returncode != 0 or "Error" in out or "does not exist" in out:
-            adb("shell", "input", "keyevent", "84")
+        if r.returncode != 0 or "Error" in out:
+            adb("shell", "input", "keyevent", "84")   # fallback: tecla SEARCH
     threading.Thread(target=run, daemon=True).start()
 
 _rot = {"land": False}

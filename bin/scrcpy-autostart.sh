@@ -165,6 +165,7 @@ while true; do
     log "override reseteado al cerrar"
   fi
   kill -9 "$SCRCPY_PID" 2>/dev/null
+  pkill -f 'scrcpy.*new-display' 2>/dev/null   # ventana "Android Tablet" (modo tablet)
   stop_bar
   echo 0 >"$MODE_FILE"
   : >"$SERIAL_FILE"

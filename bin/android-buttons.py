@@ -180,6 +180,37 @@ def rotate():
         shell_async("wm", "user-rotation", "free")
         shell_async("wm", "fixed-to-user-rotation", "default")  # auto-sanar restos
 
+# --- modo tablet: pantalla VIRTUAL tipo tablet en una segunda ventana -------
+# No toca el espejo normal: scrcpy crea un display virtual de proporción y
+# densidad de tablet (sw ~1066dp -> las apps usan su layout de tablet) y lo
+# muestra en la ventana "Android Tablet". Ojo: es un espacio aparte (una app
+# abierta allá se muda allá), y algunas apps (bancos/DRM) no permiten
+# displays secundarios.
+TABLET = {"proc": None}
+
+def tablet_running():
+    p = TABLET["proc"]
+    return p is not None and p.poll() is None
+
+def tablet_toggle():
+    if tablet_running():
+        TABLET["proc"].terminate()
+        TABLET["proc"] = None
+    else:
+        s = _serial()
+        cmd = (["/opt/homebrew/bin/scrcpy"] + (["-s", s] if s else []) +
+               ["--new-display=2560x1600/240", "--window-title=Android Tablet",
+                "--window-width=1100", "--stay-awake", "--keyboard=uhid"])
+        TABLET["proc"] = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    _tint_tablet()
+
+def _tint_tablet():
+    if _tablet_btn is not None:
+        _tablet_btn.setContentTintColor_(
+            NSColor.systemBlueColor() if tablet_running()
+            else NSColor.labelColor())
+
 # (sf_symbol, glifo_fallback, tooltip, acción) — grupo de uso común
 ITEMS = [
     ("plus.magnifyingglass",  "＋", "Agrandar ventana", lambda: scrcpy_zoom(1.12)),
@@ -197,6 +228,7 @@ ITEMS = [
 # separados abajo, tras una línea (uso menos frecuente / con más consecuencias)
 BOTTOM = [
     ("arrow.up.left.and.arrow.down.right", "⛶", "Pantalla completa", scrcpy_fullscreen),
+    ("ipad.landscape", "▭", "Modo tablet (pantalla virtual grande)", tablet_toggle),
     ("power", "⏻", "Pantalla del teléfono on/off", lambda: keyevent(26)),
 ]
 ACTIONS = ITEMS + BOTTOM
@@ -386,6 +418,10 @@ class Controller(NSObject):
             self.tintPin()
 
     def poll_(self, timer):
+        # si cerraron la ventana "Android Tablet" directamente, apagar su botón
+        if TABLET["proc"] is not None and TABLET["proc"].poll() is not None:
+            TABLET["proc"] = None
+            _tint_tablet()
         b, onscreen = _mirror_state()
         interval = 0.3                      # reposo sin espejo
         if b and onscreen:
@@ -440,6 +476,7 @@ pin_btn = _make_button(_y, "pin.fill", "📌", "Seguir el espejo (on/off)",
                        ctl, "pinClicked:", 900)
 ctl.tintPin()
 _shot_btn = None
+_tablet_btn = None
 for i, (sym, fb, tip, _fn) in enumerate(ITEMS):
     _y -= BTN_H + SP
     b = _make_button(_y, sym, fb, tip, ctl, "buttonClicked:", i)
@@ -452,7 +489,9 @@ _sep.setBoxType_(NSBoxSeparator)
 fx.addSubview_(_sep)
 for j, (sym, fb, tip, _fn) in enumerate(BOTTOM):
     _y -= BTN_H + SP
-    _make_button(_y, sym, fb, tip, ctl, "buttonClicked:", len(ITEMS) + j)
+    b = _make_button(_y, sym, fb, tip, ctl, "buttonClicked:", len(ITEMS) + j)
+    if sym == "ipad.landscape":
+        _tablet_btn = b
 
 # Poll adaptativo encadenado (one-shot): cada pasada agenda la siguiente con
 # el intervalo que toque — 30fps mientras el espejo se mueve, reposo si no.

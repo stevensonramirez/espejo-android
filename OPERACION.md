@@ -4,7 +4,7 @@ Conectas cualquier Android por USB al Mac y su pantalla aparece sola, con una ba
 nativa al lado; al desconectar, todo se cierra solo. En plegables (Razr) funciona incluso con la
 tapa cerrada. Además: **modo WiFi bajo demanda** desde un icono 📱 en la barra de menús (el USB
 sigue siendo automático). Repo público: **https://github.com/stevensonramirez/espejo-android**
-(v1.3.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
+(v1.4.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
 novia.
 
 ## 📑 Índice
@@ -121,7 +121,16 @@ Panel flotante nativo (AppKit) a la derecha del espejo (izquierda si no cabe). N
 hacer clic. Botones: 📌 seguir on/off, zoom ±, captura (→ galería del teléfono + portapapeles del
 Mac, con ✓ verde de confirmación), notificaciones, atrás/inicio/recientes/menú, Vol+/Vol−, rotar
 (rotación NATIVA por app: `wm user-rotation lock 1` ↔ `free`); abajo, separados: pantalla
-completa y apagar pantalla. Arrastrar la barra a mano desactiva el "seguir" (📌 lo reactiva).
+completa, **modo tablet** y apagar pantalla. Arrastrar la barra a mano desactiva el "seguir"
+(📌 lo reactiva).
+
+**Modo tablet 📋:** el botón abre una SEGUNDA ventana ("Android Tablet") con una pantalla
+VIRTUAL de 2560×1600/240dpi (`scrcpy --new-display`) — las apps que soportan tablet usan su
+layout de tablet, con mucho más espacio. No toca el espejo normal (conviven). El botón se pone
+azul mientras está activa; otro clic (o cerrar la ventana) la apaga. Límites: es un espacio
+aparte (una app abierta allá "se muda" allá), y algunas apps (bancos/DRM) no corren en displays
+secundarios. Al cerrar la sesión, el watcher también mata esa ventana (`pkill -f
+'scrcpy.*new-display'`).
 
 **Seguimiento:** un event tap (solo-escucha) de arrastre de mouse re-sincroniza la barra en cada
 evento → va a 1-2 cuadros del espejo (límite del compositor de macOS). Respaldo: polling

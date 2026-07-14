@@ -4,7 +4,7 @@ Conectas cualquier Android por USB al Mac y su pantalla aparece sola, con una ba
 nativa al lado; al desconectar, todo se cierra solo. En plegables (Razr) funciona incluso con la
 tapa cerrada. Además: **modo WiFi bajo demanda** desde un icono 📱 en la barra de menús (el USB
 sigue siendo automático). Repo público: **https://github.com/stevensonramirez/espejo-android**
-(v1.6.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
+(v1.7.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
 novia.
 
 ## 📑 Índice
@@ -119,7 +119,7 @@ revive en ~1-2 s. Cerrar la tapa puede disparar el bloqueo → se teclea el PIN 
 
 Panel flotante nativo (AppKit) a la derecha del espejo (izquierda si no cabe). No roba el foco al
 hacer clic. Botones: 📌 seguir on/off, zoom ±, captura (→ galería del teléfono + portapapeles del
-Mac, con ✓ verde de confirmación), notificaciones, atrás/inicio/recientes/menú, Vol+/Vol−, rotar
+Mac, con ✓ verde de confirmación), notificaciones, ajustes rápidos, buscar (también con ⌘F si el espejo está al frente), atrás/inicio/recientes, Vol+/Vol−, rotar
 (rotación NATIVA por app: `wm user-rotation lock 1` ↔ `free`); abajo, separados: pantalla
 completa, **modo tablet** y apagar pantalla. Arrastrar la barra a mano desactiva el "seguir"
 (📌 lo reactiva).

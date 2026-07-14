@@ -59,8 +59,11 @@ from Quartz import (CGWindowListCopyWindowInfo, kCGNullWindowID,
                     kCGWindowNumber, kCGWindowOwnerName,
                     CGEventTapCreate, CGEventTapEnable, CGEventMaskBit,
                     kCGSessionEventTap, kCGHeadInsertEventTap,
-                    kCGEventTapOptionListenOnly, kCGEventLeftMouseDragged,
+                    kCGEventTapOptionListenOnly, kCGEventTapOptionDefault,
+                    kCGEventLeftMouseDragged, kCGEventKeyDown,
                     kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput,
+                    CGEventGetFlags, kCGEventFlagMaskCommand,
+                    CGEventGetIntegerValueField, kCGKeyboardEventKeycode,
                     CFMachPortCreateRunLoopSource, CFRunLoopGetMain,
                     CFRunLoopAddSource, kCFRunLoopCommonModes)
 
@@ -167,6 +170,15 @@ def screenshot():
             pass
     threading.Thread(target=run, daemon=True).start()
 
+def search_android():
+    # Búsqueda global del teléfono (intent estándar; fallback: tecla SEARCH).
+    def run():
+        r = adb("shell", "am", "start", "-a", "android.search.action.GLOBAL_SEARCH")
+        out = r.stdout.decode(errors="replace") if r.stdout else ""
+        if r.returncode != 0 or "Error" in out or "does not exist" in out:
+            adb("shell", "input", "keyevent", "84")
+    threading.Thread(target=run, daemon=True).start()
+
 _rot = {"land": False}
 def rotate():
     # Rotación NATIVA: bloquea la orientación en horizontal y cada app decide —
@@ -259,10 +271,11 @@ ITEMS = [
     ("minus.magnifyingglass", "－", "Achicar ventana",  lambda: scrcpy_zoom(0.89)),
     ("camera.viewfinder", "◉", "Captura → teléfono + portapapeles", screenshot),
     ("bell", "▾", "Notificaciones", lambda: shell_async("cmd", "statusbar", "expand-notifications")),
+    ("slider.horizontal.3", "⚙", "Ajustes rápidos", lambda: shell_async("cmd", "statusbar", "expand-settings")),
+    ("magnifyingglass", "🔎", "Buscar en el teléfono (⌘F con el espejo al frente)", lambda: search_android()),
     ("chevron.backward", "‹", "Atrás",     lambda: keyevent(4)),
     ("house",            "⌂", "Inicio",    lambda: keyevent(3)),
     ("square.on.square", "❐", "Recientes", lambda: keyevent(187)),
-    ("line.3.horizontal","≡", "Menú",      lambda: keyevent(82)),
     ("speaker.wave.3",   "🔊", "Volumen +", lambda: keyevent(24)),
     ("speaker.wave.1",   "🔉", "Volumen −", lambda: keyevent(25)),
     ("rotate.right",     "⟳", "Rotar", rotate),
@@ -509,6 +522,35 @@ if _tap:
                        CFMachPortCreateRunLoopSource(None, _tap, 0),
                        kCFRunLoopCommonModes)
     CGEventTapEnable(_tap, True)
+
+# --- atajo ⌘F = búsqueda del teléfono, SOLO con el espejo al frente ----------
+# Tap interceptor (no solo-escucha): hay que TRAGARSE el ⌘F antes de que
+# llegue a scrcpy (que lo interpreta como su fullscreen, MOD+f). En cualquier
+# otra app, ⌘F pasa intacto (sigue siendo "Buscar" normal del Mac).
+_F_KEYCODE = 3   # tecla F (ANSI)
+
+def _key_cb(proxy, etype, event, refcon):
+    if etype in (kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput):
+        CGEventTapEnable(_key_tap, True)
+        return event
+    try:
+        if (CGEventGetFlags(event) & kCGEventFlagMaskCommand and
+                CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == _F_KEYCODE
+                and _scrcpy_is_front()):
+            search_android()
+            return None                     # no dejarlo llegar a scrcpy
+    except Exception:
+        pass
+    return event
+
+_key_tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap,
+                            kCGEventTapOptionDefault,
+                            CGEventMaskBit(kCGEventKeyDown), _key_cb, None)
+if _key_tap:
+    CFRunLoopAddSource(CFRunLoopGetMain(),
+                       CFMachPortCreateRunLoopSource(None, _key_tap, 0),
+                       kCFRunLoopCommonModes)
+    CGEventTapEnable(_key_tap, True)
 print(f"drag-tap: {'OK' if _tap else 'FALLO (sin permiso de Accesibilidad?)'}",
       flush=True)
 

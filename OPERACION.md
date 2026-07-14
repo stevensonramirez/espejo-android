@@ -4,7 +4,7 @@ Conectas cualquier Android por USB al Mac y su pantalla aparece sola, con una ba
 nativa al lado; al desconectar, todo se cierra solo. En plegables (Razr) funciona incluso con la
 tapa cerrada. Además: **modo WiFi bajo demanda** desde un icono 📱 en la barra de menús (el USB
 sigue siendo automático). Repo público: **https://github.com/stevensonramirez/espejo-android**
-(v1.4.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
+(v1.5.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
 novia.
 
 ## 📑 Índice
@@ -124,13 +124,16 @@ Mac, con ✓ verde de confirmación), notificaciones, atrás/inicio/recientes/me
 completa, **modo tablet** y apagar pantalla. Arrastrar la barra a mano desactiva el "seguir"
 (📌 lo reactiva).
 
-**Modo tablet 📋:** el botón abre una SEGUNDA ventana ("Android Tablet") con una pantalla
-VIRTUAL de 2560×1600/240dpi (`scrcpy --new-display`) — las apps que soportan tablet usan su
-layout de tablet, con mucho más espacio. No toca el espejo normal (conviven). El botón se pone
-azul mientras está activa; otro clic (o cerrar la ventana) la apaga. Límites: es un espacio
-aparte (una app abierta allá "se muda" allá), y algunas apps (bancos/DRM) no corren en displays
-secundarios. Al cerrar la sesión, el watcher también mata esa ventana (`pkill -f
-'scrcpy.*new-display'`).
+**Modo tablet 📋:** el botón redimensiona el display REAL del teléfono a **1600×2560 @ 240dpi**
+(`wm size` + `wm density`) — el MISMO teléfono (tu launcher, tus apps, tus notificaciones) pero
+con lienzo y densidad de tablet (sw ≈ 1066dp → las apps usan su layout de tablet). La ventana
+del espejo se redimensiona sola; la pantalla física está apagada, así que no se nota en el
+aparato. Botón azul = activo; otro clic lo devuelve al tamaño real. El estado se lee del
+teléfono ("Override size"), así que sobrevive reinicios de la barra. **Blindaje:** lidguard
+resetea `wm size/density` si el cable/WiFi se va, y el watcher lo resetea en el teardown — el
+teléfono nunca queda con resolución rara en la mano. (Enfoque descartado: display virtual
+`--new-display` — solo mostraba el launcher secundario limitado, sin forma práctica de abrir
+cualquier app.)
 
 **Seguimiento:** un event tap (solo-escucha) de arrastre de mouse re-sincroniza la barra en cada
 evento → va a 1-2 cuadros del espejo (límite del compositor de macOS). Respaldo: polling
@@ -166,6 +169,7 @@ resetea la tapa ANTES de cortar, así el cover revive al instante).
 | La barra no sigue al espejo / sin `drag-tap: OK` en el log | Falta Accesibilidad para "Python" | Ajustes del Sistema → Privacidad y seguridad → Accesibilidad → activar Python |
 | La barra sigue "a saltos" | El tap murió y quedó solo el polling | `pkill -f android-buttons.py` (renace con tap); confirmar `drag-tap: OK` |
 | Apps se ven apeñuzcadas al rotar | Quedó `fixed-to-user-rotation enabled` de pruebas viejas | `adb shell wm fixed-to-user-rotation default` (el botón ⟳ ya lo auto-sana) |
+| El teléfono quedó con resolución rara en la mano | Modo tablet no se deshizo (falla múltiple) | `adb shell "wm size reset; wm density reset"` (lidguard y el watcher lo hacen solos normalmente) |
 | La novia no recibe una mejora | Auto-update aún no corre (cada 6 h) | `cd ~/EspejoAndroid && ./update.sh`; ver `~/Library/Logs/espejo-update.log` |
 | Todo raro tras editar el watcher | El watcher viejo sigue en memoria | `launchctl unload` + `load` del plist (sección 4) |
 | "Conectar por WiFi" no encuentra el teléfono | Otra red / IP nueva / teléfono reiniciado | Mismo WiFi ambos; si reinició, conectar por cable una vez (re-arma solo) |
@@ -201,7 +205,7 @@ adb connect $(awk '{print $1}' ~/.espejo-wifi):5555   # conexión WiFi a mano
 |---|---|
 | `bin/scrcpy-autostart.sh` | Watcher: detección de teléfono/tapa, lanza scrcpy y barra, override plegable, teardown |
 | `bin/android-buttons.py` | Barra nativa AppKit: botones adb, seguimiento por event tap + polling |
-| `bin/lidguard.sh` | Watchdog EN el teléfono: revierte el override si el cable se va (arg `wifi` = solo latido) |
+| `bin/lidguard.sh` | Watchdog EN el teléfono: revierte override de tapa Y modo tablet si el cable se va (arg `wifi` = solo latido); se arma en TODAS las sesiones |
 | `bin/android-menubar.py` | Icono de barra de menús: conectar/desconectar espejo por WiFi (`adb connect` a `~/.espejo-wifi` + fallback mDNS) |
 | `install.sh` | Instalador idempotente (brew, pips, copia a `~/bin`, ambos LaunchAgents) |
 | `update.sh` | `git pull --ff-only` + `./install.sh` (manual) |

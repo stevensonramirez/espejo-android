@@ -1,8 +1,9 @@
 #!/system/bin/sh
 # lidguard — corre EN EL TELÉFONO (lo sube el watcher del Mac a /data/local/tmp).
-# Resetea el override de device_state cuando el Mac ya no está, para que el Razr
-# vuelva a comportarse según su tapa real (si no, quedaría "creyéndose abierto"
-# con la tapa cerrada y el cover muerto).
+# Cuando el Mac ya no está, deshace TODO lo que la sesión de espejo haya
+# alterado: el override de tapa (plegables) y el modo tablet (wm size/density)
+# — si no, el teléfono quedaría "creyéndose abierto" o con resolución rara.
+# Se arma en TODAS las sesiones (cualquier teléfono, no solo plegables).
 #
 # Detección en dos niveles:
 #   1. USB fuera (sysfs, casi instantáneo) -> reset en ~1-2s
@@ -23,7 +24,9 @@ usb_online() {
 }
 
 reset_and_exit() {
-  cmd device_state state reset
+  cmd device_state state reset 2>/dev/null   # tapa (plegables; no-op si no aplica)
+  wm size reset 2>/dev/null                  # modo tablet: volver al tamaño real
+  wm density reset 2>/dev/null
   rm -f "$HB"
   exit 0
 }

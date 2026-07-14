@@ -180,36 +180,37 @@ def rotate():
         shell_async("wm", "user-rotation", "free")
         shell_async("wm", "fixed-to-user-rotation", "default")  # auto-sanar restos
 
-# --- modo tablet: pantalla VIRTUAL tipo tablet en una segunda ventana -------
-# No toca el espejo normal: scrcpy crea un display virtual de proporción y
-# densidad de tablet (sw ~1066dp -> las apps usan su layout de tablet) y lo
-# muestra en la ventana "Android Tablet". Ojo: es un espacio aparte (una app
-# abierta allá se muda allá), y algunas apps (bancos/DRM) no permiten
-# displays secundarios.
-TABLET = {"proc": None}
-
-def tablet_running():
-    p = TABLET["proc"]
-    return p is not None and p.poll() is None
+# --- modo tablet: redimensiona el display REAL del teléfono ------------------
+# Nada de pantallas virtuales (el launcher secundario era inútil): se cambia
+# el tamaño/densidad LÓGICOS del display real (wm size/density) -> el MISMO
+# teléfono (tu launcher, tus apps, tus notificaciones) pero con lienzo y
+# densidad de tablet (sw ~1066dp -> layout de tablet). La ventana del espejo
+# se redimensiona sola. La pantalla física está apagada, así que no se nota;
+# el estado se verifica en el teléfono (Override) para no perder sincronía si
+# la barra renace. Blindaje: lidguard y el watcher lo resetean si algo se cae.
+TABLET = {"on": False}
+TABLET_SIZE, TABLET_DENSITY = "1600x2560", "240"
 
 def tablet_toggle():
-    if tablet_running():
-        TABLET["proc"].terminate()
-        TABLET["proc"] = None
-    else:
-        s = _serial()
-        cmd = (["/opt/homebrew/bin/scrcpy"] + (["-s", s] if s else []) +
-               ["--new-display=2560x1600/240", "--window-title=Android Tablet",
-                "--window-width=1100", "--stay-awake", "--keyboard=uhid"])
-        TABLET["proc"] = subprocess.Popen(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    _tint_tablet()
+    def run():
+        out = adb("shell", "wm", "size").stdout.decode(errors="replace")
+        if "Override" in out:                       # estaba en modo tablet
+            adb("shell", f"wm size reset; wm density reset")
+            TABLET["on"] = False
+        else:
+            adb("shell", f"wm size {TABLET_SIZE}; wm density {TABLET_DENSITY}")
+            TABLET["on"] = True
+        try:
+            ctl.performSelectorOnMainThread_withObject_waitUntilDone_(
+                "tintTablet:", None, False)
+        except Exception:
+            pass
+    threading.Thread(target=run, daemon=True).start()
 
 def _tint_tablet():
     if _tablet_btn is not None:
         _tablet_btn.setContentTintColor_(
-            NSColor.systemBlueColor() if tablet_running()
-            else NSColor.labelColor())
+            NSColor.systemBlueColor() if TABLET["on"] else NSColor.labelColor())
 
 # (sf_symbol, glifo_fallback, tooltip, acción) — grupo de uso común
 ITEMS = [
@@ -228,7 +229,7 @@ ITEMS = [
 # separados abajo, tras una línea (uso menos frecuente / con más consecuencias)
 BOTTOM = [
     ("arrow.up.left.and.arrow.down.right", "⛶", "Pantalla completa", scrcpy_fullscreen),
-    ("ipad.landscape", "▭", "Modo tablet (pantalla virtual grande)", tablet_toggle),
+    ("ipad.landscape", "▭", "Modo tablet (más espacio, mismo teléfono)", tablet_toggle),
     ("power", "⏻", "Pantalla del teléfono on/off", lambda: keyevent(26)),
 ]
 ACTIONS = ITEMS + BOTTOM
@@ -417,11 +418,10 @@ class Controller(NSObject):
             FOLLOW["on"] = False
             self.tintPin()
 
+    def tintTablet_(self, _):
+        _tint_tablet()
+
     def poll_(self, timer):
-        # si cerraron la ventana "Android Tablet" directamente, apagar su botón
-        if TABLET["proc"] is not None and TABLET["proc"].poll() is not None:
-            TABLET["proc"] = None
-            _tint_tablet()
         b, onscreen = _mirror_state()
         interval = 0.3                      # reposo sin espejo
         if b and onscreen:

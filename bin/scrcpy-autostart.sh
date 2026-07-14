@@ -109,6 +109,10 @@ while true; do
   log "conectado $SER (wifi=$WIFI, OPENED id: '${OPEN_ID:-no plegable}') -> espejo + barra"
   start_bar
 
+  # lidguard SIEMPRE (cualquier teléfono): deshace tapa/modo tablet si el
+  # cable (o el WiFi) se va a mitad de sesión.
+  arm_lidguard
+
   OVERRIDE=0
   # Si el teléfono llega con la tapa YA cerrada, aplicar el override ANTES de
   # lanzar scrcpy (si no, scrcpy ve el display apagado y muere al arrancar).
@@ -127,7 +131,10 @@ while true; do
     while kill -0 "$SCRCPY_PID" 2>/dev/null && present; do
       # revivir la barra si murió a mitad de sesión
       pgrep -f android-buttons.py >/dev/null 2>&1 || start_bar
-      if [ -n "$OPEN_ID" ]; then
+      if [ -z "$OPEN_ID" ]; then
+        # no plegable: solo el latido (lo consume lidguard)
+        "$ADB" -s "$SER" shell "touch $HB" >/dev/null 2>&1
+      else
         # un viaje adb por tick: latido + estado de la tapa FÍSICA
         info=$("$ADB" -s "$SER" shell "touch $HB; dumpsys device_state 2>/dev/null" 2>/dev/null | head -6)
         if echo "$info" | grep -q "mBaseState=.*name='CLOSED"; then
@@ -164,8 +171,10 @@ while true; do
     reset_override
     log "override reseteado al cerrar"
   fi
+  # deshacer el modo tablet si quedó puesto y el teléfono sigue ahí
+  # (si ya se fue, lo deshace lidguard en el propio teléfono)
+  present && "$ADB" -s "$SER" shell "wm size reset; wm density reset" >/dev/null 2>&1
   kill -9 "$SCRCPY_PID" 2>/dev/null
-  pkill -f 'scrcpy.*new-display' 2>/dev/null   # ventana "Android Tablet" (modo tablet)
   stop_bar
   echo 0 >"$MODE_FILE"
   : >"$SERIAL_FILE"

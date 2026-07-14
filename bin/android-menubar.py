@@ -82,7 +82,7 @@ class MenuController(NSObject):
     def setBadge_(self, text):
         item.button().setTitle_(text or "")
 
-    def _badge(self, text):
+    def pushBadge_(self, text):
         self.performSelectorOnMainThread_withObject_waitUntilDone_(
             "setBadge:", text, False)
 
@@ -93,13 +93,13 @@ class MenuController(NSObject):
     def _connect(self):
         target = saved_target()
         if not target:
-            self._badge(" sin teléfono memorizado")
+            self.pushBadge_(" sin teléfono memorizado")
             notify("Conecta el teléfono por cable una vez para memorizarlo")
             return
-        self._badge(" buscando…")
+        self.pushBadge_(" buscando…")
         out = sh(ADB, "connect", target, timeout=8)
         if "connected" in out:                 # "connected to" / "already connected"
-            self._badge("")
+            self.pushBadge_("")
             notify("Teléfono encontrado — abriendo el espejo…")
             return
         # ¿cambió la IP? intentar redescubrirlo por mDNS
@@ -108,7 +108,7 @@ class MenuController(NSObject):
             if len(parts) >= 3 and "_adb._tcp" in parts[1] and ":" in parts[-1]:
                 out = sh(ADB, "connect", parts[-1], timeout=8)
                 if "connected" in out:
-                    self._badge("")
+                    self.pushBadge_("")
                     ip = parts[-1].split(":")[0]
                     try:                        # memorizar la IP nueva
                         with open(STATE_FILE) as f:
@@ -119,11 +119,11 @@ class MenuController(NSObject):
                         pass
                     notify("Teléfono encontrado (IP nueva) — abriendo el espejo…")
                     return
-        self._badge(" no lo encuentro (¿misma red WiFi?)")
+        self.pushBadge_(" no lo encuentro (¿misma red WiFi?)")
         notify("No encontré el teléfono en esta red. ¿Mismo WiFi? "
                "Si reiniciaste el teléfono, conéctalo por cable una vez.")
         import time as _t; _t.sleep(6)
-        self._badge("")
+        self.pushBadge_("")
 
     def disconnectWifi_(self, sender):
         threading.Thread(target=self._disconnect, daemon=True).start()

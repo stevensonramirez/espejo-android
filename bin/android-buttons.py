@@ -30,7 +30,16 @@ def _serial():
     except Exception:
         return ""
 
-from Foundation import NSObject
+from Foundation import NSObject, NSProcessInfo
+
+# Sin esto, macOS aplica "App Nap" a esta app accesoria y le retrasa los
+# timers -> la barra seguía al espejo a saltos. Latencia crítica = ticks
+# puntuales; AllowingIdleSystemSleep = no impide que el Mac duerma.
+_NSActivityUserInitiatedAllowingIdleSystemSleep = 0x00FFFFFF & ~0x00100000
+_NSActivityLatencyCritical = 0xFF00000000
+_activity = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+    _NSActivityUserInitiatedAllowingIdleSystemSleep | _NSActivityLatencyCritical,
+    "seguir la ventana del espejo sin lag")
 from AppKit import (
     NSApplication, NSApplicationActivationPolicyAccessory,
     NSBackingStoreBuffered, NSBox, NSBoxSeparator, NSButton,
@@ -47,7 +56,13 @@ from AppKit import (
 from Quartz import (CGWindowListCopyWindowInfo, kCGNullWindowID,
                     kCGWindowBounds, kCGWindowListOptionIncludingWindow,
                     kCGWindowListOptionOnScreenOnly, kCGWindowIsOnscreen,
-                    kCGWindowNumber, kCGWindowOwnerName)
+                    kCGWindowNumber, kCGWindowOwnerName,
+                    CGEventTapCreate, CGEventTapEnable, CGEventMaskBit,
+                    kCGSessionEventTap, kCGHeadInsertEventTap,
+                    kCGEventTapOptionListenOnly, kCGEventLeftMouseDragged,
+                    kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput,
+                    CFMachPortCreateRunLoopSource, CFRunLoopGetMain,
+                    CFRunLoopAddSource, kCFRunLoopCommonModes)
 
 # ---------------------------------------------------------------- adb helpers
 def adb(*args):
@@ -235,6 +250,20 @@ def _screen_right_edge(x, w):
         pass
     return None
 
+def _reposition(b):
+    # Pega la barra al costado del espejo (derecha; izquierda si no cabe).
+    x, y, w, h = b
+    nx = x + w + GAP
+    limit = _screen_right_edge(x, w)
+    if limit is not None and nx + PANEL_W > limit:
+        nx = x - PANEL_W - GAP
+    # CG (origen arriba) -> AppKit (origen abajo, pantalla principal)
+    prim_h = NSScreen.screens()[0].frame().size.height
+    STATE["prog_move"] = True
+    panel.setFrameOrigin_((nx, prim_h - y - PANEL_H))
+    STATE["prog_move"] = False
+    STATE["moved_at"] = time.time()
+
 def _scrcpy_is_front():
     try:
         fa = NSWorkspace.sharedWorkspace().frontmostApplication()
@@ -341,6 +370,15 @@ class Controller(NSObject):
             _shot_btn.setImage_(img.imageWithSymbolConfiguration_(_sym_cfg))
             _shot_btn.setContentTintColor_(NSColor.labelColor())
 
+    def dragSync(self):
+        # Llamado por el event tap en cada evento de arrastre del mouse:
+        # si el espejo cambió de sitio, la barra lo sigue en ese mismo evento.
+        if FOLLOW["on"]:
+            b, on = _mirror_state()
+            if b and on and b != STATE["last"]:
+                _reposition(b)
+                STATE["last"] = b
+
     def windowDidMove_(self, note):
         # Movimiento MANUAL (no programático) -> soltar el "seguir".
         if not STATE["prog_move"] and FOLLOW["on"]:
@@ -355,24 +393,14 @@ class Controller(NSObject):
                 STATE["raised"] = True
                 raise_mirror()
             if FOLLOW["on"] and b != STATE["last"]:
-                x, y, w, h = b
-                nx = x + w + GAP
-                limit = _screen_right_edge(x, w)
-                if limit is not None and nx + PANEL_W > limit:
-                    nx = x - PANEL_W - GAP  # no cabe a la derecha -> a la IZQUIERDA
-                # CG (origen arriba) -> AppKit (origen abajo, pantalla principal)
-                prim_h = NSScreen.screens()[0].frame().size.height
-                STATE["prog_move"] = True
-                panel.setFrameOrigin_((nx, prim_h - y - PANEL_H))
-                STATE["prog_move"] = False
-                STATE["moved_at"] = time.time()
+                _reposition(b)
             STATE["last"] = b
             if not panel.isVisible():
                 panel.orderFrontRegardless()
             panel.setLevel_(NSFloatingWindowLevel if _scrcpy_is_front()
                             else NSNormalWindowLevel)
-            # adaptativo: 30fps mientras el espejo se está moviendo, calma si no
-            interval = 0.033 if time.time() - STATE["moved_at"] < 0.8 else 0.12
+            # adaptativo: 60fps mientras el espejo se está moviendo, calma si no
+            interval = 0.016 if time.time() - STATE["moved_at"] < 0.8 else 0.08
         elif panel.isVisible():             # el espejo no está en este Space
             panel.orderOut_(None)
             STATE["last"] = None
@@ -381,6 +409,31 @@ class Controller(NSObject):
 
 ctl = Controller.alloc().init()
 panel.setDelegate_(ctl)
+
+# --- seguimiento PEGADO al arrastre: event tap (solo escucha) de mouse-drag.
+# En cada evento de arrastre se re-sincroniza la barra -> se mueve con el
+# espejo como una sola pieza. (AXObserver no sirve: PyObjC no soporta ese
+# callback; los monitores globales de NSEvent tampoco llegan a apps accesorias.)
+def _drag_cb(proxy, etype, event, refcon):
+    if etype in (kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput):
+        CGEventTapEnable(_tap, True)        # macOS lo apaga si se demora: revivir
+        return event
+    try:
+        ctl.dragSync()
+    except Exception as e:
+        print("drag-tap error:", e, flush=True)
+    return event
+
+_tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap,
+                        kCGEventTapOptionListenOnly,
+                        CGEventMaskBit(kCGEventLeftMouseDragged), _drag_cb, None)
+if _tap:
+    CFRunLoopAddSource(CFRunLoopGetMain(),
+                       CFMachPortCreateRunLoopSource(None, _tap, 0),
+                       kCFRunLoopCommonModes)
+    CGEventTapEnable(_tap, True)
+print(f"drag-tap: {'OK' if _tap else 'FALLO (sin permiso de Accesibilidad?)'}",
+      flush=True)
 
 _y = PANEL_H - PAD - BTN_H
 pin_btn = _make_button(_y, "pin.fill", "📌", "Seguir el espejo (on/off)",

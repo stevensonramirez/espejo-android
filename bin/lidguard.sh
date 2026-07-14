@@ -7,6 +7,10 @@
 # Detección en dos niveles:
 #   1. USB fuera (sysfs, casi instantáneo) -> reset en ~1-2s
 #   2. Latido del Mac viejo (>12s)         -> respaldo por si el sysfs no aplica
+#
+# Modo: $1 = "wifi" -> sesión inalámbrica: NO hay cable, así que el chequeo
+# USB se salta y manda solo el latido (si el WiFi se cae, reset en ~12s).
+MODE="${1:-usb}"
 HB=/data/local/tmp/scrcpy-heartbeat
 
 usb_online() {
@@ -26,7 +30,7 @@ reset_and_exit() {
 
 while true; do
   sleep 1
-  usb_online || reset_and_exit
+  [ "$MODE" = "wifi" ] || usb_online || reset_and_exit
   if [ -f "$HB" ]; then
     now=$(date +%s)
     mt=$(stat -c %Y "$HB" 2>/dev/null || echo 0)

@@ -62,7 +62,8 @@ arm_lidguard() {
   # pkill ANCLADO (^sh ...) para no matar la propia sesión adb (su cmdline
   # también contiene "lidguard"). El "sleep 1" da tiempo a que setsid
   # re-parente el proceso a init (si no, muere con la sesión adb).
-  "$ADB" -s "$SER" shell "touch $HB; pkill -f '^sh /data/local/tmp/lidguard' 2>/dev/null; setsid sh /data/local/tmp/lidguard.sh </dev/null >/dev/null 2>&1 & sleep 1" 2>/dev/null
+  local LGMODE="usb"; [ "$WIFI" = 1 ] && LGMODE="wifi"
+  "$ADB" -s "$SER" shell "touch $HB; pkill -f '^sh /data/local/tmp/lidguard' 2>/dev/null; setsid sh /data/local/tmp/lidguard.sh $LGMODE </dev/null >/dev/null 2>&1 & sleep 1" 2>/dev/null
 }
 
 apply_override() {
@@ -82,10 +83,30 @@ while true; do
   "$ADB" wait-for-device
   SER=$(first_device)
   [ -z "$SER" ] && { sleep 1; continue; }
+  # ¿Conexión WiFi (serial ip:puerto) o USB?
+  WIFI=0; case "$SER" in *:*) WIFI=1 ;; esac
+
+  if [ "$WIFI" = 0 ]; then
+    # USB: armar el modo WiFi para el futuro (una sola vez por reinicio del
+    # teléfono — `adb tcpip` reinicia el adbd, así que solo si hace falta y
+    # ANTES de lanzar nada) y memorizar la IP para el menú de barra.
+    if [ "$("$ADB" -s "$SER" shell getprop service.adb.tcp.port 2>/dev/null | tr -d '\r')" != "5555" ]; then
+      log "armando modo WiFi (adb tcpip 5555, reinicia adbd)"
+      "$ADB" -s "$SER" tcpip 5555 >/dev/null 2>&1
+      sleep 3
+      "$ADB" wait-for-device 2>/dev/null
+      SER=$(first_device)
+      [ -z "$SER" ] && { sleep 1; continue; }
+    fi
+    IP=$("$ADB" -s "$SER" shell ip -4 addr show wlan0 2>/dev/null \
+           | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
+    [ -n "$IP" ] && echo "$IP $SER" >"$HOME/.espejo-wifi"
+  fi
+
   echo "$SER" >"$SERIAL_FILE"
   echo 0 >"$MODE_FILE"
   OPEN_ID=$(resolve_open_id)
-  log "conectado $SER (OPENED id: '${OPEN_ID:-no plegable}') -> espejo + barra"
+  log "conectado $SER (wifi=$WIFI, OPENED id: '${OPEN_ID:-no plegable}') -> espejo + barra"
   start_bar
 
   OVERRIDE=0

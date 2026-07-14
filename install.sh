@@ -32,8 +32,10 @@ say "Instalando módulos de Python (PyObjC, solo para tu usuario)…"
 # 3. Scripts -------------------------------------------------------------
 say "Copiando scripts a ~/bin…"
 mkdir -p "$HOME/bin"
-cp bin/scrcpy-autostart.sh bin/android-buttons.py bin/lidguard.sh "$HOME/bin/"
-chmod +x "$HOME/bin/scrcpy-autostart.sh" "$HOME/bin/android-buttons.py"
+cp bin/scrcpy-autostart.sh bin/android-buttons.py bin/lidguard.sh \
+   bin/android-menubar.py "$HOME/bin/"
+chmod +x "$HOME/bin/scrcpy-autostart.sh" "$HOME/bin/android-buttons.py" \
+         "$HOME/bin/android-menubar.py"
 
 # 4. LaunchAgent ---------------------------------------------------------
 say "Instalando el servicio de arranque automático…"
@@ -44,6 +46,14 @@ launchctl unload "$PLIST" 2>/dev/null || true
 pkill -x scrcpy 2>/dev/null || true
 pkill -f android-buttons.py 2>/dev/null || true
 launchctl load "$PLIST"
+
+# 4a. Icono de barra de menús (conexión WiFi bajo demanda)
+say "Instalando el icono de barra de menús (espejo por WiFi)…"
+MBAR="$HOME/Library/LaunchAgents/com.stevenson.espejo-menubar.plist"
+sed "s|__HOME__|$HOME|g" launchagent/com.stevenson.espejo-menubar.plist.template >"$MBAR"
+launchctl unload "$MBAR" 2>/dev/null || true
+pkill -f android-menubar.py 2>/dev/null || true
+launchctl load "$MBAR"
 
 # 4b. Auto-actualización (git pull cada 6 h; no toca nada si no hay cambios)
 say "Instalando la auto-actualización…"

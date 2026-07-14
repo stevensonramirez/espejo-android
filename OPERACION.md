@@ -2,8 +2,10 @@
 
 Conectas cualquier Android por USB al Mac y su pantalla aparece sola, con una barra de botones
 nativa al lado; al desconectar, todo se cierra solo. En plegables (Razr) funciona incluso con la
-tapa cerrada. Repo público: **https://github.com/stevensonramirez/espejo-android** (v1.2.0,
-jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la novia.
+tapa cerrada. Además: **modo WiFi bajo demanda** desde un icono 📱 en la barra de menús (el USB
+sigue siendo automático). Repo público: **https://github.com/stevensonramirez/espejo-android**
+(v1.3.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
+novia.
 
 ## 📑 Índice
 - [[#1. Arquitectura en una hoja|1 · Arquitectura en una hoja]]
@@ -12,8 +14,9 @@ jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pr
 - [[#4. Gestión del servicio|4 · Gestión del servicio]]
 - [[#5. Plegables (Razr): tapa cerrada|5 · Plegables (Razr): tapa cerrada]]
 - [[#6. La barra de botones|6 · La barra de botones]]
-- [[#7. Troubleshooting|7 · Troubleshooting]]
-- [[#8. Quick reference|8 · Quick reference]]
+- [[#7. Modo WiFi (bajo demanda)|7 · Modo WiFi (bajo demanda)]]
+- [[#8. Troubleshooting|8 · Troubleshooting]]
+- [[#9. Quick reference|9 · Quick reference]]
 - [[#Appendix · Contexto para agentes de IA|Appendix · Contexto para agentes de IA]]
 
 ## 1. Arquitectura en una hoja
@@ -27,12 +30,19 @@ jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pr
 
    LaunchAgent com.stevenson.scrcpy-auto  (RunAtLoad + KeepAlive)
    └─ ~/bin/scrcpy-autostart.sh  «el watcher»
-        ├─ adb wait-for-device → detecta CUALQUIER Android autorizado (sin serial fijo)
+        ├─ adb wait-for-device → detecta CUALQUIER Android autorizado (USB o WiFi)
+        ├─ USB: arma el modo WiFi (adb tcpip 5555, 1 vez por reinicio del
+        │       teléfono) y memoriza su IP en ~/.espejo-wifi
         ├─ escribe /tmp/android-mirror-serial (la barra lo lee)
         ├─ plegable? → override de device state + sube lidguard.sh al teléfono
-        ├─ lanza scrcpy  (ventana "Android", USB, pantalla física apagada)
+        ├─ lanza scrcpy  (ventana "Android", pantalla física apagada)
         ├─ lanza ~/bin/android-buttons.py  «la barra» (y la revive si muere)
         └─ al desconectar: resetea override, cierra scrcpy y barra
+
+   LaunchAgent com.stevenson.espejo-menubar  (siempre vivo)
+   └─ ~/bin/android-menubar.py  «icono 📱 en la barra de menús»
+        └─ clic "Conectar por WiFi" → adb connect a la IP memorizada
+           (con redescubrimiento mDNS si cambió) → el watcher hace el resto
 ```
 
 - **scrcpy 3.3.4** (Homebrew) hace el espejo; flags: `--turn-screen-off --stay-awake
@@ -66,8 +76,10 @@ repo, commit + push; el Mac de la novia lo toma solo en ≤6 h.
 | Qué | Dónde |
 |---|---|
 | Repo local | `~/EspejoAndroid` (remoto `origin` = GitHub) |
-| Scripts vivos (los que corren) | `~/bin/scrcpy-autostart.sh`, `~/bin/android-buttons.py`, `~/bin/lidguard.sh` |
-| LaunchAgents | `~/Library/LaunchAgents/com.stevenson.scrcpy-auto.plist` y `com.stevenson.espejo-update.plist` |
+| Scripts vivos (los que corren) | `~/bin/scrcpy-autostart.sh`, `~/bin/android-buttons.py`, `~/bin/lidguard.sh`, `~/bin/android-menubar.py` |
+| LaunchAgents | `~/Library/LaunchAgents/com.stevenson.scrcpy-auto.plist`, `com.stevenson.espejo-update.plist` y `com.stevenson.espejo-menubar.plist` |
+| Teléfono memorizado para WiFi | `~/.espejo-wifi` ("IP SERIAL", lo escribe el watcher en cada sesión USB) |
+| Log del icono de menús | `/tmp/android-menubar.log` |
 | Log del watcher | `~/Library/Logs/scrcpy-auto.log` (+ `.out.log` / `.err.log`) |
 | Log de la barra | `/tmp/android-buttons.log` (debe decir `drag-tap: OK`) |
 | Log del auto-update | `~/Library/Logs/espejo-update.log` |
@@ -116,7 +128,25 @@ evento → va a 1-2 cuadros del espejo (límite del compositor de macOS). Respal
 adaptativo por ID de ventana (0.016 s en movimiento / 0.08 s quieto / 0.3 s sin espejo) que cubre
 cambios de Space y movimientos por script. Requiere el permiso de Accesibilidad de "Python".
 
-## 7. Troubleshooting
+## 7. Modo WiFi (bajo demanda)
+
+El USB no cambia: cable = espejo automático, siempre. El WiFi es **adicional y manual**:
+
+1. **Se arma solo:** cada vez que conectas el teléfono por cable, el watcher habilita
+   `adb tcpip 5555` (solo si hace falta — una vez por reinicio del teléfono, porque reinicia el
+   adbd y cuesta ~3 s) y memoriza la IP en `~/.espejo-wifi`.
+2. **Se usa con un clic:** icono 📱 en la barra de menús → "Conectar espejo por WiFi". El menú
+   también muestra el estado (USB / WiFi / sin conexión) y "Desconectar" cuando aplica.
+3. El `adb connect` hace aparecer el device y **el watcher hace todo lo demás** (espejo, barra,
+   tapa) exactamente igual que por USB. Si la IP cambió, se redescubre por mDNS y se re-memoriza.
+
+**Límites conocidos:** misma red WiFi (en redes corporativas los equipos suelen estar aislados);
+tras reiniciar el teléfono hay que pasar por cable una vez; sin cable el teléfono no carga y
+gasta batería; en sesión WiFi el lidguard corre en modo `wifi` (sin señal de cable: si la red se
+cae con la tapa engañada, el reset llega por latido en ~12 s; el botón "Desconectar" del menú
+resetea la tapa ANTES de cortar, así el cover revive al instante).
+
+## 8. Troubleshooting
 
 | Síntoma | Causa | Arreglo |
 |---|---|---|
@@ -129,8 +159,10 @@ cambios de Space y movimientos por script. Requiere el permiso de Accesibilidad 
 | Apps se ven apeñuzcadas al rotar | Quedó `fixed-to-user-rotation enabled` de pruebas viejas | `adb shell wm fixed-to-user-rotation default` (el botón ⟳ ya lo auto-sana) |
 | La novia no recibe una mejora | Auto-update aún no corre (cada 6 h) | `cd ~/EspejoAndroid && ./update.sh`; ver `~/Library/Logs/espejo-update.log` |
 | Todo raro tras editar el watcher | El watcher viejo sigue en memoria | `launchctl unload` + `load` del plist (sección 4) |
+| "Conectar por WiFi" no encuentra el teléfono | Otra red / IP nueva / teléfono reiniciado | Mismo WiFi ambos; si reinició, conectar por cable una vez (re-arma solo) |
+| No aparece el icono 📱 en la barra de menús | El agent del menú no corre | `launchctl load ~/Library/LaunchAgents/com.stevenson.espejo-menubar.plist`; ver `/tmp/android-menubar.log` |
 
-## 8. Quick reference
+## 9. Quick reference
 
 ```bash
 adb devices                                  # ¿teléfono autorizado?
@@ -139,6 +171,8 @@ cat /tmp/android-buttons.log                 # salud de la barra (drag-tap: OK)
 pkill -f android-buttons.py                  # reiniciar barra (renace sola)
 cd ~/EspejoAndroid && ./update.sh            # actualizar YA a la última versión
 adb shell cmd device_state state reset       # des-engañar la tapa a mano
+cat ~/.espejo-wifi                           # IP memorizada para el modo WiFi
+adb connect $(awk '{print $1}' ~/.espejo-wifi):5555   # conexión WiFi a mano
 ```
 
 ---
@@ -158,7 +192,8 @@ adb shell cmd device_state state reset       # des-engañar la tapa a mano
 |---|---|
 | `bin/scrcpy-autostart.sh` | Watcher: detección de teléfono/tapa, lanza scrcpy y barra, override plegable, teardown |
 | `bin/android-buttons.py` | Barra nativa AppKit: botones adb, seguimiento por event tap + polling |
-| `bin/lidguard.sh` | Watchdog EN el teléfono: revierte el override si el cable se va |
+| `bin/lidguard.sh` | Watchdog EN el teléfono: revierte el override si el cable se va (arg `wifi` = solo latido) |
+| `bin/android-menubar.py` | Icono de barra de menús: conectar/desconectar espejo por WiFi (`adb connect` a `~/.espejo-wifi` + fallback mDNS) |
 | `install.sh` | Instalador idempotente (brew, pips, copia a `~/bin`, ambos LaunchAgents) |
 | `update.sh` | `git pull --ff-only` + `./install.sh` (manual) |
 | `autoupdate.sh` | Lo corre el agent cada 6 h: fetch; si hay commits → pull + install con `ESPEJO_AUTOUPDATE=1` |
@@ -195,6 +230,13 @@ adb shell cmd device_state state reset       # des-engañar la tapa a mano
   ~10 s en revivir la barra); y un pipeline que termina en grep/pgrep sin matches sale con código
   144/1 — benigno.
 - El diálogo RSA del teléfono es por-Mac: cada máquina nueva necesita su "Permitir siempre".
+- WiFi: `adb tcpip 5555` REINICIA el adbd (el device desaparece ~3 s) → el watcher solo lo hace
+  si `getprop service.adb.tcp.port` ≠ 5555 y siempre ANTES de lanzar scrcpy. Un serial con `:`
+  (`ip:puerto`) = sesión WiFi → lidguard va en modo `wifi` (sin chequeo de cable). El "Desconectar"
+  del menú debe resetear el device_state ANTES del `adb disconnect` (sin cable no hay sysfs y el
+  latido tarda ~12 s).
+- Los NSMenuItem con enabled manual requieren `menu.setAutoenablesItems_(False)` (si no, AppKit
+  los pisa).
 
 ### Mapa local ↔ remoto
 - No hay servidor: "remoto" = GitHub como canal de distribución. Ambos Macs son instalaciones

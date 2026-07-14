@@ -137,6 +137,15 @@ el cable se va, y el watcher lo resetea en el teardown — el teléfono nunca qu
 rara en la mano. (Enfoque descartado: display virtual `--new-display` — solo mostraba el
 launcher secundario limitado, sin forma práctica de abrir cualquier app.)
 
+**Limitaciones conocidas del modo tablet (bugs de Moto, no nuestros):** el dock/taskbar del home
+se dibuja "en escalera" (los íconos funcionan, solo se ven corridos) y los ajustes rápidos
+renderizan a medias. Se probó todo lo reparable por adb (reiniciar launcher y SystemUI,
+densidades 240/320/nativa, ruta de rotación, reconstruir navbar) sin éxito: es un bug del
+launcher de Moto con el resize en caliente. Las APPS se ven perfectas — que es para lo que
+sirve el modo. Ojo: entrar/salir del modo tablet puede disparar el candado → teclear el PIN en
+el espejo. La ventana por defecto del modo tablet es 1389×901 (ajustable en `TABLET_WIN` de la
+barra y `WIDTH` del watcher).
+
 **Seguimiento:** un event tap (solo-escucha) de arrastre de mouse re-sincroniza la barra en cada
 evento → va a 1-2 cuadros del espejo (límite del compositor de macOS). Respaldo: polling
 adaptativo por ID de ventana (0.016 s en movimiento / 0.08 s quieto / 0.3 s sin espejo) que cubre

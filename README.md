@@ -23,6 +23,10 @@ en el teléfono y el permiso de Accesibilidad en el Mac).
 
 ## Actualizar
 
+**No hay que hacer nada:** cada 6 horas se revisa el repo y, si hay versión
+nueva, se instala sola (log en `~/Library/Logs/espejo-update.log`). Para
+forzarla ya mismo:
+
 ```bash
 cd ~/EspejoAndroid && ./update.sh
 ```
@@ -35,11 +39,14 @@ cd ~/EspejoAndroid && ./update.sh
 | `android-buttons.py` | `~/bin` | Barra de botones nativa (AppKit) que sigue a la ventana del espejo |
 | `lidguard.sh` | se sube al teléfono | Watchdog: revierte el override de tapa si el cable se va |
 | LaunchAgent `com.stevenson.scrcpy-auto` | `~/Library/LaunchAgents` | Arranca el watcher al iniciar sesión y lo mantiene vivo |
+| LaunchAgent `com.stevenson.espejo-update` | `~/Library/LaunchAgents` | Auto-actualiza desde el repo cada 6 horas |
 
 ## Desinstalar
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.stevenson.scrcpy-auto.plist
+launchctl unload ~/Library/LaunchAgents/com.stevenson.scrcpy-auto.plist \
+                 ~/Library/LaunchAgents/com.stevenson.espejo-update.plist
 rm ~/Library/LaunchAgents/com.stevenson.scrcpy-auto.plist \
+   ~/Library/LaunchAgents/com.stevenson.espejo-update.plist \
    ~/bin/scrcpy-autostart.sh ~/bin/android-buttons.py ~/bin/lidguard.sh
 ```

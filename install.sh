@@ -45,6 +45,23 @@ pkill -x scrcpy 2>/dev/null || true
 pkill -f android-buttons.py 2>/dev/null || true
 launchctl load "$PLIST"
 
+# 4b. Auto-actualización (git pull cada 6 h; no toca nada si no hay cambios)
+say "Instalando la auto-actualización…"
+chmod +x autoupdate.sh update.sh install.sh
+UPD="$HOME/Library/LaunchAgents/com.stevenson.espejo-update.plist"
+sed -e "s|__HOME__|$HOME|g" -e "s|__REPO__|$PWD|g" \
+  launchagent/com.stevenson.espejo-update.plist.template >"$UPD.new"
+# No recargar el agent de update desde sí mismo (se mataría a mitad de update)
+if ! cmp -s "$UPD.new" "$UPD" 2>/dev/null; then
+  mv "$UPD.new" "$UPD"
+  if [ -z "$ESPEJO_AUTOUPDATE" ]; then
+    launchctl unload "$UPD" 2>/dev/null || true
+    launchctl load "$UPD"
+  fi
+else
+  rm -f "$UPD.new"
+fi
+
 # 5. Listo ---------------------------------------------------------------
 cat <<EOF
 

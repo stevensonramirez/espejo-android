@@ -45,8 +45,9 @@ from AppKit import (
     NSWorkspace,
 )
 from Quartz import (CGWindowListCopyWindowInfo, kCGNullWindowID,
-                    kCGWindowBounds, kCGWindowListOptionOnScreenOnly,
-                    kCGWindowOwnerName)
+                    kCGWindowBounds, kCGWindowListOptionIncludingWindow,
+                    kCGWindowListOptionOnScreenOnly, kCGWindowIsOnscreen,
+                    kCGWindowNumber, kCGWindowOwnerName)
 
 # ---------------------------------------------------------------- adb helpers
 def adb(*args):
@@ -186,19 +187,41 @@ BOTTOM = [
 ACTIONS = ITEMS + BOTTOM
 
 # --------------------------------------------------------- geometría / espejo
-def _mirror_on_active_space():
-    # (x, y, w, h) en coords CG (origen arriba-izquierda) SOLO si el espejo
-    # está en el escritorio ACTIVO (la lista on-screen es por Space). Si no, None.
+# Rastreo barato: se busca el ID de la ventana de scrcpy UNA vez (scan completo)
+# y de ahí en adelante se consulta solo esa ventana (~0.2ms), lo que permite
+# seguirla a 30fps mientras se mueve sin gastar CPU cuando está quieta.
+_win = {"id": None}
+
+def _find_mirror_id():
+    info = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID) or []
+    for w in info:
+        if w.get(kCGWindowOwnerName) == "scrcpy":
+            b = w.get(kCGWindowBounds)
+            if b and int(b["Width"]) > 50 and int(b["Height"]) > 50:
+                return w.get(kCGWindowNumber)
+    return None
+
+def _mirror_state():
+    # ((x,y,w,h) en coords CG | None, visible_en_este_Space: bool)
     try:
-        info = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID) or []
-        for win in info:
-            if win.get(kCGWindowOwnerName) == "scrcpy":
-                b = win.get(kCGWindowBounds)
-                if b and int(b["Width"]) > 50 and int(b["Height"]) > 50:
-                    return int(b["X"]), int(b["Y"]), int(b["Width"]), int(b["Height"])
+        if _win["id"]:
+            info = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow,
+                                              _win["id"]) or []
+            for w in info:
+                if w.get(kCGWindowOwnerName) == "scrcpy":
+                    b = w.get(kCGWindowBounds)
+                    if b and int(b["Width"]) > 50:
+                        on = bool(w.get(kCGWindowIsOnscreen, False))
+                        return (int(b["X"]), int(b["Y"]),
+                                int(b["Width"]), int(b["Height"])), on
+            _win["id"] = None          # la ventana murió (scrcpy renació)
+        wid = _find_mirror_id()
+        if wid:
+            _win["id"] = wid
+            return _mirror_state()
     except Exception:
         pass
-    return None
+    return None, False
 
 def _screen_right_edge(x, w):
     # Borde derecho del MONITOR donde está el espejo (multi-pantalla).
@@ -223,48 +246,10 @@ def _scrcpy_is_front():
 # ------------------------------------------------------------------ interfaz
 BTN_W, BTN_H, PAD, SP = 30, 24, 5, 2
 FOLLOW = {"on": True}
-STATE = {"raised": False, "prog_move": False, "ax_pid": None, "ax_obs": None,
-         "last": None}
-
-def _setup_ax_follow():
-    # Seguimiento por EVENTOS: macOS avisa cuando la ventana de scrcpy se mueve
-    # o cambia de tamaño (AXObserver) y la barra se reposiciona al instante,
-    # sin esperar el poll. Usa el mismo permiso de Accesibilidad de python3.13.
-    # Si algo falla, el poll (respaldo) sigue funcionando solo.
-    try:
-        from ApplicationServices import (AXObserverCreate,
-                                         AXObserverAddNotification,
-                                         AXObserverGetRunLoopSource,
-                                         AXUIElementCreateApplication)
-        from CoreFoundation import (CFRunLoopGetCurrent, CFRunLoopAddSource,
-                                    kCFRunLoopDefaultMode)
-        pid = None
-        for a in NSWorkspace.sharedWorkspace().runningApplications():
-            if a.localizedName() == "scrcpy":
-                pid = a.processIdentifier()
-                break
-        if pid is None or pid == STATE["ax_pid"]:
-            return
-        def _cb(observer, element, notification, refcon):
-            ctl.performSelectorOnMainThread_withObject_waitUntilDone_(
-                "poll:", None, False)
-        err, obs = AXObserverCreate(pid, _cb, None)
-        if err != 0 or obs is None:
-            return
-        appel = AXUIElementCreateApplication(pid)
-        for note in ("AXWindowMoved", "AXWindowResized", "AXMoved",
-                     "AXResized", "AXWindowCreated", "AXWindowMiniaturized",
-                     "AXWindowDeminiaturized"):
-            try:
-                AXObserverAddNotification(obs, appel, note, None)
-            except Exception:
-                pass
-        CFRunLoopAddSource(CFRunLoopGetCurrent(),
-                           AXObserverGetRunLoopSource(obs),
-                           kCFRunLoopDefaultMode)
-        STATE["ax_pid"], STATE["ax_obs"] = pid, obs   # retener (evitar GC)
-    except Exception:
-        pass
+STATE = {"raised": False, "prog_move": False, "last": None, "moved_at": 0.0}
+# Nota: se intentó seguimiento por eventos (AXObserver) pero PyObjC no soporta
+# ese callback ("Callable argument is not a PyObjC closure"). El poll
+# adaptativo sobre la ventana exacta da el mismo resultado visual.
 
 app = NSApplication.sharedApplication()
 app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
@@ -363,14 +348,13 @@ class Controller(NSObject):
             self.tintPin()
 
     def poll_(self, timer):
-        _setup_ax_follow()                  # (re)engancha eventos si scrcpy (re)nació
-        b = _mirror_on_active_space()
-        if b:
+        b, onscreen = _mirror_state()
+        interval = 0.3                      # reposo sin espejo
+        if b and onscreen:
             if not STATE["raised"]:         # primera vez que lo vemos -> al frente
                 STATE["raised"] = True
                 raise_mirror()
             if FOLLOW["on"] and b != STATE["last"]:
-                STATE["last"] = b
                 x, y, w, h = b
                 nx = x + w + GAP
                 limit = _screen_right_edge(x, w)
@@ -381,13 +365,19 @@ class Controller(NSObject):
                 STATE["prog_move"] = True
                 panel.setFrameOrigin_((nx, prim_h - y - PANEL_H))
                 STATE["prog_move"] = False
+                STATE["moved_at"] = time.time()
+            STATE["last"] = b
             if not panel.isVisible():
                 panel.orderFrontRegardless()
             panel.setLevel_(NSFloatingWindowLevel if _scrcpy_is_front()
                             else NSNormalWindowLevel)
+            # adaptativo: 30fps mientras el espejo se está moviendo, calma si no
+            interval = 0.033 if time.time() - STATE["moved_at"] < 0.8 else 0.12
         elif panel.isVisible():             # el espejo no está en este Space
             panel.orderOut_(None)
             STATE["last"] = None
+        NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            interval, self, "poll:", None, False)
 
 ctl = Controller.alloc().init()
 panel.setDelegate_(ctl)
@@ -411,11 +401,10 @@ for j, (sym, fb, tip, _fn) in enumerate(BOTTOM):
     _y -= BTN_H + SP
     _make_button(_y, sym, fb, tip, ctl, "buttonClicked:", len(ITEMS) + j)
 
-# Poll de respaldo: 0.1s (la consulta CGWindowList cuesta ~2ms). Los eventos
-# AX dan el reposicionamiento instantáneo; esto cubre lo que los eventos no
-# avisan (cambio de Space, foco, scrcpy recién nacido).
+# Poll adaptativo encadenado (one-shot): cada pasada agenda la siguiente con
+# el intervalo que toque — 30fps mientras el espejo se mueve, reposo si no.
 NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-    0.1, ctl, "poll:", None, True)
+    0.1, ctl, "poll:", None, False)
 
 panel.orderFrontRegardless()
 app.run()

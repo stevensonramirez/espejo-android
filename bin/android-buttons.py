@@ -192,7 +192,9 @@ WA_SEND = {"key": None, "xy": None}
 
 def _handle_enter():
     def run():
-        out = adb("shell", "dumpsys window | grep -m1 mFocusedApp").stdout.decode(errors="replace")
+        # OJO: mFocusedApp sale una vez POR DISPLAY en el plegable (la primera
+        # es null) -> usar topResumedActivity, que es única y es la app real.
+        out = adb("shell", "dumpsys activity activities | grep -m1 topResumedActivity").stdout.decode(errors="replace")
         if "com.whatsapp" not in out:
             adb("shell", "input", "keyevent", "66")     # Enter normal
             return

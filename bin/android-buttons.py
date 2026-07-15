@@ -302,7 +302,7 @@ def tablet_toggle():
             # guardar prefs del usuario una vez; lienzo apaisado FIJO (lock 0)
             # y navegación de 3 botones (el taskbar fijo abajo no tapa nada)
             adb("shell", 'PREF=/data/local/tmp/scrcpy-prefs; '
-                'if [ ! -f "$PREF" ]; then '
+                'if [ ! -f "$PREF" ] && ! wm size | grep -q Override; then '
                 'A=$(settings get system accelerometer_rotation); '
                 'U=$(settings get system user_rotation); '
                 'N=$(cmd overlay list 2>/dev/null | grep "^\\[x\\] com.android.internal.systemui.navbar" | head -1 | cut -d" " -f2); '

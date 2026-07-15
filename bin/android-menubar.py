@@ -21,6 +21,28 @@ from AppKit import (NSApplication, NSApplicationActivationPolicyAccessory,
 
 ADB = "/opt/homebrew/bin/adb"
 STATE_FILE = os.path.expanduser("~/.espejo-wifi")   # "IP SERIAL" (lo escribe el watcher)
+CONFIG_FILE = os.path.expanduser("~/.espejo-config")  # preferencias de ESTE Mac
+
+
+def tablet_default():
+    try:
+        with open(CONFIG_FILE) as f:
+            return "TABLET_DEFAULT=1" in f.read()
+    except Exception:
+        return False
+
+
+def set_tablet_default(on):
+    lines = []
+    try:
+        with open(CONFIG_FILE) as f:
+            lines = [l for l in f.read().splitlines()
+                     if l and not l.startswith("TABLET_DEFAULT=")]
+    except Exception:
+        pass
+    lines.append("TABLET_DEFAULT=" + ("1" if on else "0"))
+    with open(CONFIG_FILE, "w") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def sh(*args, timeout=10):
@@ -76,6 +98,7 @@ class MenuController(NSObject):
         else:
             self.connect_item.setTitle_("Conectar espejo por WiFi")
         self.disconnect_item.setHidden_(not wifi)
+        self.tablet_item.setState_(1 if tablet_default() else 0)
 
     # --- feedback visible junto al icono (las notificaciones pueden estar
     # silenciadas por macOS, así que el estado se muestra en la propia barra)
@@ -125,6 +148,13 @@ class MenuController(NSObject):
         import time as _t; _t.sleep(6)
         self.pushBadge_("")
 
+    def toggleTabletDefault_(self, sender):
+        on = not tablet_default()
+        set_tablet_default(on)
+        sender.setState_(1 if on else 0)
+        notify("Modo tablet al conectar por USB: " + ("ACTIVADO" if on else "desactivado")
+               + " (aplica desde la próxima conexión)")
+
     def disconnectWifi_(self, sender):
         threading.Thread(target=self._disconnect, daemon=True).start()
 
@@ -168,6 +198,12 @@ ctl.disconnect_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
     "Desconectar espejo WiFi", "disconnectWifi:", "")
 ctl.disconnect_item.setTarget_(ctl)
 menu.addItem_(ctl.disconnect_item)
+menu.addItem_(NSMenuItem.separatorItem())
+ctl.tablet_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+    "Modo tablet al conectar por USB", "toggleTabletDefault:", "")
+ctl.tablet_item.setTarget_(ctl)
+ctl.tablet_item.setState_(1 if tablet_default() else 0)
+menu.addItem_(ctl.tablet_item)
 item.setMenu_(menu)
 
 app.run()

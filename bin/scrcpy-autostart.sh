@@ -107,15 +107,24 @@ while true; do
   # Modo TABLET por defecto en USB (apaisado 2560x1600 @240; el botón 📋 de la
   # barra lo quita/pone). Reiniciar el launcher: sin eso el dock queda roto
   # tras el cambio de densidad. En WiFi: modo normal (más píxeles = lento).
+  # Modo tablet por defecto SOLO si este Mac lo tiene activado (check en el
+  # menú del icono 📱 -> ~/.espejo-config). Sin eso: modo normal (el botón 📋
+  # de la barra siempre puede activarlo por sesión).
   WIDTH=381
-  if [ "$WIFI" = 0 ]; then
+  if [ "$WIFI" = 0 ] && grep -qs '^TABLET_DEFAULT=1' "$HOME/.espejo-config"; then
     # Modo tablet: guardar las preferencias reales del usuario (rotación y
     # modo de navegación) UNA vez, y aplicar: lienzo apaisado FIJO (lock 0 =
     # horizontal, porque el lienzo 2560x1600 hace que "natural" sea
     # horizontal y el sensor lo mandaba a vertical), navegación de 3 botones
     # (con gestos, el taskbar flotante tapaba los textbox; fijo abajo no).
+    # matar un lidguard viejo ANTES del setup (si el watcher murió sin
+    # teardown, el lidguard huérfano podría "restaurar" a mitad del setup)
+    "$ADB" -s "$SER" shell "touch $HB; pkill -f '^sh /data/local/tmp/lidguard' 2>/dev/null" >/dev/null 2>&1
+    # prefs del usuario: guardarlas SOLO desde un estado prístino (sin
+    # override) — si no, una sesión reciclada guardaría el estado ya
+    # modificado como si fuera el original
     "$ADB" -s "$SER" shell 'PREF=/data/local/tmp/scrcpy-prefs
-if [ ! -f "$PREF" ]; then
+if [ ! -f "$PREF" ] && ! wm size | grep -q Override; then
   A=$(settings get system accelerometer_rotation)
   U=$(settings get system user_rotation)
   N=$(cmd overlay list 2>/dev/null | grep "^\[x\] com.android.internal.systemui.navbar" | head -1 | cut -d" " -f2)

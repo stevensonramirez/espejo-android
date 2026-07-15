@@ -180,18 +180,24 @@ def search_android():
             adb("shell", "input", "keyevent", "84")   # fallback: tecla SEARCH
     threading.Thread(target=run, daemon=True).start()
 
-_rot = {"land": False}
+_rot = {"alt": False}
 def rotate():
-    # Rotación NATIVA: bloquea la orientación en horizontal y cada app decide —
-    # las que admiten horizontal rotan de verdad (se expanden); las que no
-    # (p. ej. el home) se quedan en vertical. Nada de forzar el display
-    # (fixed-to-user-rotation dejaba las apps apeñuzcadas en modo compatibilidad).
-    _rot["land"] = not _rot["land"]
-    if _rot["land"]:
-        shell_async("wm", "user-rotation", "lock", "1")
-    else:
-        shell_async("wm", "user-rotation", "free")
-        shell_async("wm", "fixed-to-user-rotation", "default")  # auto-sanar restos
+    # Rotación NATIVA, consciente del modo:
+    # - Modo tablet (lienzo 2560x1600): "natural" ES horizontal -> lock 0 =
+    #   horizontal (default) y el botón alterna a vertical (lock 1).
+    # - Modo normal: natural es vertical -> el botón alterna a horizontal
+    #   (lock 1) y de vuelta a libre (cada app decide; el home no rota y ok).
+    def run():
+        out = adb("shell", "wm", "size").stdout.decode(errors="replace")
+        tablet = "Override" in out
+        _rot["alt"] = not _rot["alt"]
+        if tablet:
+            adb("shell", "wm", "user-rotation", "lock", "1" if _rot["alt"] else "0")
+        elif _rot["alt"]:
+            adb("shell", "wm", "user-rotation", "lock", "1")
+        else:
+            adb("shell", "wm user-rotation free; wm fixed-to-user-rotation default")
+    threading.Thread(target=run, daemon=True).start()
 
 # --- modo tablet: redimensiona el display REAL del teléfono ------------------
 # Nada de pantallas virtuales (el launcher secundario era inútil): se cambia
@@ -236,8 +242,13 @@ def tablet_toggle():
             return
         out = adb("shell", "wm", "size").stdout.decode(errors="replace")
         if "Override" in out:                       # APAGAR: volver al real
-            adb("shell", "wm size reset; wm density reset")
-            adb("shell", "device_config", "delete", "launcher", "enable_taskbar")
+            adb("shell", 'wm size reset; wm density reset; '
+                'device_config delete launcher enable_taskbar; '
+                'PREF=/data/local/tmp/scrcpy-prefs; '
+                'if [ -f "$PREF" ]; then read A U N < "$PREF"; '
+                '[ -n "$N" ] && cmd overlay enable-exclusive --category "$N"; '
+                'if [ "$A" = "1" ]; then wm user-rotation free; '
+                'else wm user-rotation lock "${U:-0}"; fi; rm -f "$PREF"; fi')
             TABLET["on"] = False
             _restart_launcher()
             time.sleep(1.2)                         # scrcpy re-adapta el video
@@ -250,10 +261,18 @@ def tablet_toggle():
                 TABLET["win"] = [int(x) for x in r.stdout.strip().split(", ")]
             except Exception:
                 TABLET["win"] = None
-            # sin taskbar: en esta config de Moto queda congelado a mitad de
-            # animación (dock "en escalera") y flota sobre los textbox
-            adb("shell", "device_config", "put", "launcher", "enable_taskbar", "false")
-            adb("shell", f"wm size {TABLET_SIZE}; wm density {TABLET_DENSITY}")
+            # guardar prefs del usuario una vez; lienzo apaisado FIJO (lock 0)
+            # y navegación de 3 botones (el taskbar fijo abajo no tapa nada)
+            adb("shell", 'PREF=/data/local/tmp/scrcpy-prefs; '
+                'if [ ! -f "$PREF" ]; then '
+                'A=$(settings get system accelerometer_rotation); '
+                'U=$(settings get system user_rotation); '
+                'N=$(cmd overlay list 2>/dev/null | grep "^\\[x\\] com.android.internal.systemui.navbar" | head -1 | cut -d" " -f2); '
+                'echo "$A $U $N" > "$PREF"; fi; '
+                'device_config put launcher enable_taskbar false; '
+                f'wm size {TABLET_SIZE}; wm density {TABLET_DENSITY}; '
+                'wm user-rotation lock 0; '
+                'cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton')
             TABLET["on"] = True
             _restart_launcher()
             time.sleep(1.2)

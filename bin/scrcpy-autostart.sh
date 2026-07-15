@@ -109,15 +109,28 @@ while true; do
   # tras el cambio de densidad. En WiFi: modo normal (más píxeles = lento).
   WIDTH=381
   if [ "$WIFI" = 0 ]; then
-    # sin taskbar en modo tablet (en Moto queda congelado a mitad de animación
-    # y flota sobre los campos de texto); se restaura al salir del modo
-    "$ADB" -s "$SER" shell "device_config put launcher enable_taskbar false" >/dev/null 2>&1
-    "$ADB" -s "$SER" shell "wm size 2560x1600; wm density 240" >/dev/null 2>&1
+    # Modo tablet: guardar las preferencias reales del usuario (rotación y
+    # modo de navegación) UNA vez, y aplicar: lienzo apaisado FIJO (lock 0 =
+    # horizontal, porque el lienzo 2560x1600 hace que "natural" sea
+    # horizontal y el sensor lo mandaba a vertical), navegación de 3 botones
+    # (con gestos, el taskbar flotante tapaba los textbox; fijo abajo no).
+    "$ADB" -s "$SER" shell 'PREF=/data/local/tmp/scrcpy-prefs
+if [ ! -f "$PREF" ]; then
+  A=$(settings get system accelerometer_rotation)
+  U=$(settings get system user_rotation)
+  N=$(cmd overlay list 2>/dev/null | grep "^\[x\] com.android.internal.systemui.navbar" | head -1 | cut -d" " -f2)
+  echo "$A $U $N" > "$PREF"
+fi
+device_config put launcher enable_taskbar false
+wm size 2560x1600
+wm density 240
+wm user-rotation lock 0
+cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton' >/dev/null 2>&1
     LPKG=$("$ADB" -s "$SER" shell cmd shortcut get-default-launcher 2>/dev/null \
              | sed -n 's/.*{\([^/}]*\)\/.*/\1/p' | head -1)
     [ -n "$LPKG" ] && "$ADB" -s "$SER" shell "am force-stop $LPKG; input keyevent 3" >/dev/null 2>&1
     WIDTH=1389
-    log "modo tablet por defecto (USB): 2560x1600@240, launcher $LPKG reiniciado"
+    log "modo tablet por defecto (USB): 2560x1600@240 horizontal, 3 botones, launcher $LPKG reiniciado"
   fi
 
   echo "$SER" >"$SERIAL_FILE"
@@ -189,8 +202,18 @@ while true; do
     log "override reseteado al cerrar"
   fi
   # deshacer el modo tablet si quedó puesto y el teléfono sigue ahí
-  # (si ya se fue, lo deshace lidguard en el propio teléfono)
-  present && "$ADB" -s "$SER" shell "wm size reset; wm density reset; device_config delete launcher enable_taskbar" >/dev/null 2>&1
+  # (si ya se fue, lo deshace lidguard en el propio teléfono):
+  # tamaño/densidad, taskbar, y restaurar rotación + navegación del usuario
+  present && "$ADB" -s "$SER" shell 'wm size reset
+wm density reset
+device_config delete launcher enable_taskbar
+PREF=/data/local/tmp/scrcpy-prefs
+if [ -f "$PREF" ]; then
+  read A U N < "$PREF"
+  [ -n "$N" ] && cmd overlay enable-exclusive --category "$N"
+  if [ "$A" = "1" ]; then wm user-rotation free; else wm user-rotation lock "${U:-0}"; fi
+  rm -f "$PREF"
+fi' >/dev/null 2>&1
   kill -9 "$SCRCPY_PID" 2>/dev/null
   stop_bar
   echo 0 >"$MODE_FILE"

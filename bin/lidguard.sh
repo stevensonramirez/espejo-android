@@ -28,6 +28,18 @@ reset_and_exit() {
   wm size reset 2>/dev/null                  # modo tablet: volver al tamaño real
   wm density reset 2>/dev/null
   device_config delete launcher enable_taskbar 2>/dev/null   # taskbar de vuelta
+  # restaurar rotación y modo de navegación que tenía el usuario
+  PREF=/data/local/tmp/scrcpy-prefs
+  if [ -f "$PREF" ]; then
+    read A U N < "$PREF"
+    [ -n "$N" ] && cmd overlay enable-exclusive --category "$N" 2>/dev/null
+    if [ "$A" = "1" ]; then
+      wm user-rotation free 2>/dev/null
+    else
+      wm user-rotation lock "${U:-0}" 2>/dev/null
+    fi
+    rm -f "$PREF"
+  fi
   rm -f "$HB"
   exit 0
 }

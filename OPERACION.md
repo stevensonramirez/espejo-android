@@ -4,7 +4,7 @@ Conectas cualquier Android por USB al Mac y su pantalla aparece sola, con una ba
 nativa al lado; al desconectar, todo se cierra solo. En plegables (Razr) funciona incluso con la
 tapa cerrada. Además: **modo WiFi bajo demanda** desde un icono 📱 en la barra de menús (el USB
 sigue siendo automático). Repo público: **https://github.com/stevensonramirez/espejo-android**
-(v1.7.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
+(v1.11.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
 novia.
 
 ## 📑 Índice

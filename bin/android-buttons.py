@@ -13,6 +13,7 @@ android-buttons-tk.py.bak), que era lenta y frágil en macOS.
 - La lanza el watcher scrcpy-autostart.sh (la revive si muere).
 """
 import os
+import re
 import subprocess
 import threading
 import time
@@ -63,6 +64,7 @@ from Quartz import (CGWindowListCopyWindowInfo, kCGNullWindowID,
                     kCGEventLeftMouseDragged, kCGEventKeyDown,
                     kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput,
                     CGEventGetFlags, kCGEventFlagMaskCommand, kCGEventFlagMaskShift,
+                    kCGEventFlagMaskControl, kCGEventFlagMaskAlternate,
                     CGEventGetIntegerValueField, kCGKeyboardEventKeycode,
                     CFMachPortCreateRunLoopSource, CFRunLoopGetMain,
                     CFRunLoopAddSource, kCFRunLoopCommonModes)
@@ -178,6 +180,40 @@ def search_android():
         out = r.stdout.decode(errors="replace") if r.stdout else ""
         if r.returncode != 0 or "Error" in out:
             adb("shell", "input", "keyevent", "84")   # fallback: tecla SEARCH
+    threading.Thread(target=run, daemon=True).start()
+
+# --- Enter inteligente (solo en el espejo): en WhatsApp, Enter ENVÍA ---------
+# El teléfono suelto no cambia en nada (el ajuste "Intro para enviar" de
+# WhatsApp queda intacto). El tap del Mac se traga el Enter y decide: si la
+# app enfocada es WhatsApp, toca el botón de enviar (coords cacheadas por
+# orientación, descubiertas con uiautomator la primera vez); si no, manda un
+# Enter normal por adb. Shift+Enter pasa intacto (= salto de línea).
+WA_SEND = {"key": None, "xy": None}
+
+def _handle_enter():
+    def run():
+        out = adb("shell", "dumpsys window | grep -m1 mFocusedApp").stdout.decode(errors="replace")
+        if "com.whatsapp" not in out:
+            adb("shell", "input", "keyevent", "66")     # Enter normal
+            return
+        key = adb("shell", "wm size; settings get system user_rotation") \
+            .stdout.decode(errors="replace").strip()
+        if WA_SEND["key"] == key and WA_SEND["xy"]:
+            x, y = WA_SEND["xy"]
+            adb("shell", "input", "tap", str(x), str(y))
+            return
+        dump = adb("shell", "uiautomator dump /sdcard/.ui.xml >/dev/null 2>&1; "
+                   "cat /sdcard/.ui.xml 2>/dev/null; rm -f /sdcard/.ui.xml") \
+            .stdout.decode(errors="replace")
+        m = re.search(r'content-desc="(?:Send|Enviar)"[^>]*?'
+                      r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', dump)
+        if m:
+            x1, y1, x2, y2 = map(int, m.groups())
+            x, y = (x1 + x2) // 2, (y1 + y2) // 2
+            WA_SEND["key"], WA_SEND["xy"] = key, (x, y)
+            adb("shell", "input", "tap", str(x), str(y))
+        else:
+            adb("shell", "input", "keyevent", "66")     # sin botón (texto vacío)
     threading.Thread(target=run, daemon=True).start()
 
 _rot = {"alt": False}
@@ -554,6 +590,7 @@ if _tap:
 #   ⌘F -> buscador de apps  ·  ⌘← -> inicio de línea  ·  ⌘→ -> fin de línea
 _F_KEYCODE = 3                       # tecla F (ANSI)
 _CMD_NAV = {123: 122, 124: 123}      # mac ⌘←/⌘→ -> Android MOVE_HOME/MOVE_END
+_ENTER_KEYCODES = (36, 76)           # Return y Enter del teclado numérico
 
 def _key_cb(proxy, etype, event, refcon):
     if etype in (kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput):
@@ -561,14 +598,21 @@ def _key_cb(proxy, etype, event, refcon):
         return event
     try:
         flags = CGEventGetFlags(event)
-        if (flags & kCGEventFlagMaskCommand) and _scrcpy_is_front():
-            kc = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
+        if not _scrcpy_is_front():
+            return event
+        kc = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
+        if flags & kCGEventFlagMaskCommand:
             if kc == _F_KEYCODE:
                 search_android()
                 return None                 # no dejarlo llegar a scrcpy
             if kc in _CMD_NAV and not (flags & kCGEventFlagMaskShift):
                 keyevent(_CMD_NAV[kc])
                 return None                 # sin esto, scrcpy rotaría la pantalla
+        elif kc in _ENTER_KEYCODES and not (flags & (
+                kCGEventFlagMaskShift | kCGEventFlagMaskControl |
+                kCGEventFlagMaskAlternate)):
+            _handle_enter()                 # Enter: en WhatsApp = ENVIAR
+            return None
     except Exception:
         pass
     return event

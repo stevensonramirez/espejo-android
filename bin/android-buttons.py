@@ -62,7 +62,7 @@ from Quartz import (CGWindowListCopyWindowInfo, kCGNullWindowID,
                     kCGEventTapOptionListenOnly, kCGEventTapOptionDefault,
                     kCGEventLeftMouseDragged, kCGEventKeyDown,
                     kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput,
-                    CGEventGetFlags, kCGEventFlagMaskCommand,
+                    CGEventGetFlags, kCGEventFlagMaskCommand, kCGEventFlagMaskShift,
                     CGEventGetIntegerValueField, kCGKeyboardEventKeycode,
                     CFMachPortCreateRunLoopSource, CFRunLoopGetMain,
                     CFRunLoopAddSource, kCFRunLoopCommonModes)
@@ -237,6 +237,7 @@ def tablet_toggle():
         out = adb("shell", "wm", "size").stdout.decode(errors="replace")
         if "Override" in out:                       # APAGAR: volver al real
             adb("shell", "wm size reset; wm density reset")
+            adb("shell", "device_config", "delete", "launcher", "enable_taskbar")
             TABLET["on"] = False
             _restart_launcher()
             time.sleep(1.2)                         # scrcpy re-adapta el video
@@ -249,6 +250,9 @@ def tablet_toggle():
                 TABLET["win"] = [int(x) for x in r.stdout.strip().split(", ")]
             except Exception:
                 TABLET["win"] = None
+            # sin taskbar: en esta config de Moto queda congelado a mitad de
+            # animación (dock "en escalera") y flota sobre los textbox
+            adb("shell", "device_config", "put", "launcher", "enable_taskbar", "false")
             adb("shell", f"wm size {TABLET_SIZE}; wm density {TABLET_DENSITY}")
             TABLET["on"] = True
             _restart_launcher()
@@ -524,22 +528,28 @@ if _tap:
                        kCFRunLoopCommonModes)
     CGEventTapEnable(_tap, True)
 
-# --- atajo ⌘F = búsqueda del teléfono, SOLO con el espejo al frente ----------
-# Tap interceptor (no solo-escucha): hay que TRAGARSE el ⌘F antes de que
-# llegue a scrcpy (que lo interpreta como su fullscreen, MOD+f). En cualquier
-# otra app, ⌘F pasa intacto (sigue siendo "Buscar" normal del Mac).
-_F_KEYCODE = 3   # tecla F (ANSI)
+# --- atajos ⌘ estilo Mac, SOLO con el espejo al frente -----------------------
+# Tap interceptor (no solo-escucha): hay que TRAGARSE estos atajos antes de
+# que lleguen a scrcpy, que los interpreta como SUS atajos (⌘F = fullscreen,
+# ⌘←/⌘→ = rotar el display). En cualquier otra app pasan intactos.
+#   ⌘F -> buscador de apps  ·  ⌘← -> inicio de línea  ·  ⌘→ -> fin de línea
+_F_KEYCODE = 3                       # tecla F (ANSI)
+_CMD_NAV = {123: 122, 124: 123}      # mac ⌘←/⌘→ -> Android MOVE_HOME/MOVE_END
 
 def _key_cb(proxy, etype, event, refcon):
     if etype in (kCGEventTapDisabledByTimeout, kCGEventTapDisabledByUserInput):
         CGEventTapEnable(_key_tap, True)
         return event
     try:
-        if (CGEventGetFlags(event) & kCGEventFlagMaskCommand and
-                CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == _F_KEYCODE
-                and _scrcpy_is_front()):
-            search_android()
-            return None                     # no dejarlo llegar a scrcpy
+        flags = CGEventGetFlags(event)
+        if (flags & kCGEventFlagMaskCommand) and _scrcpy_is_front():
+            kc = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
+            if kc == _F_KEYCODE:
+                search_android()
+                return None                 # no dejarlo llegar a scrcpy
+            if kc in _CMD_NAV and not (flags & kCGEventFlagMaskShift):
+                keyevent(_CMD_NAV[kc])
+                return None                 # sin esto, scrcpy rotaría la pantalla
     except Exception:
         pass
     return event

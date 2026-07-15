@@ -27,6 +27,7 @@ reset_and_exit() {
   cmd device_state state reset 2>/dev/null   # tapa (plegables; no-op si no aplica)
   wm size reset 2>/dev/null                  # modo tablet: volver al tamaño real
   wm density reset 2>/dev/null
+  device_config delete launcher enable_taskbar 2>/dev/null   # taskbar de vuelta
   rm -f "$HB"
   exit 0
 }

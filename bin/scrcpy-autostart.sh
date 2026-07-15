@@ -109,6 +109,9 @@ while true; do
   # tras el cambio de densidad. En WiFi: modo normal (más píxeles = lento).
   WIDTH=381
   if [ "$WIFI" = 0 ]; then
+    # sin taskbar en modo tablet (en Moto queda congelado a mitad de animación
+    # y flota sobre los campos de texto); se restaura al salir del modo
+    "$ADB" -s "$SER" shell "device_config put launcher enable_taskbar false" >/dev/null 2>&1
     "$ADB" -s "$SER" shell "wm size 2560x1600; wm density 240" >/dev/null 2>&1
     LPKG=$("$ADB" -s "$SER" shell cmd shortcut get-default-launcher 2>/dev/null \
              | sed -n 's/.*{\([^/}]*\)\/.*/\1/p' | head -1)
@@ -187,7 +190,7 @@ while true; do
   fi
   # deshacer el modo tablet si quedó puesto y el teléfono sigue ahí
   # (si ya se fue, lo deshace lidguard en el propio teléfono)
-  present && "$ADB" -s "$SER" shell "wm size reset; wm density reset" >/dev/null 2>&1
+  present && "$ADB" -s "$SER" shell "wm size reset; wm density reset; device_config delete launcher enable_taskbar" >/dev/null 2>&1
   kill -9 "$SCRCPY_PID" 2>/dev/null
   stop_bar
   echo 0 >"$MODE_FILE"

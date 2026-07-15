@@ -137,14 +137,18 @@ el cable se va, y el watcher lo resetea en el teardown — el teléfono nunca qu
 rara en la mano. (Enfoque descartado: display virtual `--new-display` — solo mostraba el
 launcher secundario limitado, sin forma práctica de abrir cualquier app.)
 
-**Limitaciones conocidas del modo tablet (bugs de Moto, no nuestros):** el dock/taskbar del home
-se dibuja "en escalera" (los íconos funcionan, solo se ven corridos) y los ajustes rápidos
-renderizan a medias. Se probó todo lo reparable por adb (reiniciar launcher y SystemUI,
-densidades 240/320/nativa, ruta de rotación, reconstruir navbar) sin éxito: es un bug del
-launcher de Moto con el resize en caliente. Las APPS se ven perfectas — que es para lo que
-sirve el modo. Ojo: entrar/salir del modo tablet puede disparar el candado → teclear el PIN en
-el espejo. La ventana por defecto del modo tablet es 1389×901 (ajustable en `TABLET_WIN` de la
-barra y `WIDTH` del watcher).
+**Cómo quedó armado el modo tablet (v1.9.0):** horizontal FIJO (`wm user-rotation lock 0` — en
+este lienzo lo natural es horizontal y el sensor lo mandaba a vertical), **navegación de 3
+botones** durante el modo (con gestos, el taskbar era un pill flotante roto que tapaba los
+campos de texto; fijo abajo renderiza bien y no tapa nada), y las preferencias reales del
+usuario (auto-rotate, orientación, modo de navegación) se guardan una vez en el teléfono
+(`/data/local/tmp/scrcpy-prefs`) y se restauran al salir del modo, en el teardown y en
+lidguard. El botón ⟳ es consciente del modo: en tablet alterna horizontal↔vertical; en modo
+normal, horizontal↔libre. Limitación conocida: los ajustes rápidos renderizan a medias (bug de
+Moto con el resize en caliente; el botón 🔔 de notificaciones funciona completo). Ojo:
+entrar/salir del modo tablet puede disparar el candado → teclear el PIN en el espejo. Ventana
+por defecto del modo tablet: 1389×901 (ajustable en `TABLET_WIN` de la barra y `WIDTH` del
+watcher).
 
 **Seguimiento:** un event tap (solo-escucha) de arrastre de mouse re-sincroniza la barra en cada
 evento → va a 1-2 cuadros del espejo (límite del compositor de macOS). Respaldo: polling

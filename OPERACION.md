@@ -79,6 +79,7 @@ repo, commit + push; el Mac de la novia lo toma solo en ≤6 h.
 | Scripts vivos (los que corren) | `~/bin/scrcpy-autostart.sh`, `~/bin/android-buttons.py`, `~/bin/lidguard.sh`, `~/bin/android-menubar.py` |
 | LaunchAgents | `~/Library/LaunchAgents/com.stevenson.scrcpy-auto.plist`, `com.stevenson.espejo-update.plist` y `com.stevenson.espejo-menubar.plist` |
 | Teléfono memorizado para WiFi | `~/.espejo-wifi` ("IP SERIAL", lo escribe el watcher en cada sesión USB) |
+| Preferencias de ESTE Mac | `~/.espejo-config` (`TABLET_DEFAULT=1` = modo tablet al conectar; lo maneja el check del menú 📱) |
 | Log del icono de menús | `/tmp/android-menubar.log` |
 | Log del watcher | `~/Library/Logs/scrcpy-auto.log` (+ `.out.log` / `.err.log`) |
 | Log de la barra | `/tmp/android-buttons.log` (debe decir `drag-tap: OK`) |
@@ -124,7 +125,12 @@ Mac, con ✓ verde de confirmación), notificaciones, ajustes rápidos, buscar (
 completa, **modo tablet** y apagar pantalla. Arrastrar la barra a mano desactiva el "seguir"
 (📌 lo reactiva).
 
-**Modo tablet 📋 — DEFAULT en USB:** al conectar por cable, el watcher pone el display REAL del
+**Modo tablet 📋 — OPT-IN por Mac (v1.11.0):** por defecto el espejo abre en modo NORMAL. Para
+que un Mac arranque siempre en modo tablet: menú del icono 📱 → check **"Modo tablet al conectar
+por USB"** (persiste en `~/.espejo-config`, fuera del repo — cada Mac decide y las
+actualizaciones no lo pisan; el Mac de Stevenson lo tiene activado, el de la novia no). El botón
+📋 de la barra siempre puede ponerlo/quitarlo por sesión. Cuando está activo, al conectar por
+cable el watcher pone el display REAL del
 teléfono en **2560×1600 @ 240dpi APAISADO** (`wm size` + `wm density`) y abre la ventana grande
 (1150 px) — el MISMO teléfono (tu launcher, tus apps, tus notificaciones) pero con lienzo
 horizontal y densidad de tablet (sw ≈ 1066dp → layout de tablet). El botón 📋 de la barra lo

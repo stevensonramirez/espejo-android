@@ -1,6 +1,8 @@
 #!/bin/bash
 # Auto-actualización silenciosa de Espejo Android.
-# La corre un LaunchAgent cada 6 horas: si hay versión nueva en el repo,
+# La corre un LaunchAgent cada 6 horas — y el watcher la dispara también al
+# conectar el teléfono (launchctl kickstart) si detecta versión nueva.
+# Si hay versión nueva en el repo,
 # la baja y re-instala. Si no hay cambios (o no hay internet), no toca nada,
 # así nunca interrumpe una sesión de espejo en uso.
 cd "$(dirname "$0")" || exit 0

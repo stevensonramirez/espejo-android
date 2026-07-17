@@ -72,6 +72,12 @@ else
   rm -f "$UPD.new"
 fi
 
+# 4c. Registrar dónde quedó el repo: el watcher lo usa para chequear al
+# conectar el teléfono si hay versión nueva (sin esperar las 6 horas).
+CFG="$HOME/.espejo-config"
+{ grep -vs '^REPO=' "$CFG" || true; echo "REPO=$PWD"; } >"$CFG.new"
+mv "$CFG.new" "$CFG"
+
 # 5. Listo ---------------------------------------------------------------
 cat <<EOF
 

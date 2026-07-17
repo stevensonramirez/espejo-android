@@ -78,6 +78,33 @@ reset_override() {
   OVERRIDE=0
 }
 
+# Al conectar el teléfono: ¿hay versión nueva en el repo? Si sí, disparar el
+# agent de auto-update (job INDEPENDIENTE: si el update corriera aquí como
+# hijo, el `launchctl unload` del instalador lo mataría a mitad de camino) y
+# esperar a que el instalador reinicie este watcher — la sesión arranca ya
+# con la versión nueva. Sin red o sin novedades: sigue normal en ~1 s.
+maybe_update() {
+  local repo remote waited pulled FP WD
+  repo=$(sed -n 's/^REPO=//p' "$HOME/.espejo-config" 2>/dev/null | head -1)
+  [ -n "$repo" ] && [ -d "$repo/.git" ] || return 0
+  git -C "$repo" fetch --quiet origin 2>/dev/null & FP=$!
+  ( sleep 10; kill "$FP" 2>/dev/null ) 2>/dev/null & WD=$!   # tope 10 s (portales cautivos)
+  wait "$FP" 2>/dev/null || { kill "$WD" 2>/dev/null; return 0; }
+  kill "$WD" 2>/dev/null
+  remote=$(git -C "$repo" rev-parse '@{u}' 2>/dev/null) || return 0
+  [ "$(git -C "$repo" rev-parse @)" = "$remote" ] && return 0
+  log "versión nueva detectada -> actualizando antes de abrir el espejo"
+  launchctl kickstart "gui/$(id -u)/com.stevenson.espejo-update" 2>/dev/null || return 0
+  waited=0; pulled=0
+  while [ $waited -lt 90 ]; do   # el instalador nos matará (unload+load) al terminar
+    sleep 2; waited=$((waited+2))
+    if [ $pulled = 0 ] && [ "$(git -C "$repo" rev-parse @ 2>/dev/null)" = "$remote" ]; then
+      pulled=1; waited=60        # pull listo: máx ~30 s más para el reinicio
+    fi
+  done
+  log "la actualización no reinició el watcher -> sigo con la versión actual"
+}
+
 log "watcher iniciado (cualquier Android autorizado)"
 
 while true; do
@@ -86,6 +113,11 @@ while true; do
   [ -z "$SER" ] && { sleep 1; continue; }
   # ¿Conexión WiFi (serial ip:puerto) o USB?
   WIFI=0; case "$SER" in *:*) WIFI=1 ;; esac
+
+  # chequear si hay versión nueva ANTES de montar nada (si la hay, el
+  # instalador reinicia el watcher y la sesión abre ya actualizada)
+  maybe_update
+  present || continue   # ¿se fue el teléfono durante el chequeo/espera?
 
   if [ "$WIFI" = 0 ]; then
     # USB: armar el modo WiFi para el futuro (una sola vez por reinicio del

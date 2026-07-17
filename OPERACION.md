@@ -4,7 +4,7 @@ Conectas cualquier Android por USB al Mac y su pantalla aparece sola, con una ba
 nativa al lado; al desconectar, todo se cierra solo. En plegables (Razr) funciona incluso con la
 tapa cerrada. Además: **modo WiFi bajo demanda** desde un icono 📱 en la barra de menús (el USB
 sigue siendo automático). Repo público: **https://github.com/stevensonramirez/espejo-android**
-(v1.11.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
+(v1.12.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
 novia.
 
 ## 📑 Índice
@@ -23,10 +23,11 @@ novia.
 
 ```
                           GitHub (espejo-android)
-                               ▲            │ git fetch cada 6 h
+                               ▲            │ git fetch cada 6 h Y al conectar el teléfono
                         push   │            ▼
    Mac de Stevenson ───────────┘   LaunchAgent com.stevenson.espejo-update
-                                   └─ autoupdate.sh → install.sh (solo si hay commits)
+                                   └─ autoupdate.sh → install.sh (solo si hay commits;
+                                      el watcher lo dispara con launchctl kickstart)
 
    LaunchAgent com.stevenson.scrcpy-auto  (RunAtLoad + KeepAlive)
    └─ ~/bin/scrcpy-autostart.sh  «el watcher»
@@ -62,8 +63,10 @@ cd ~/EspejoAndroid && ./install.sh
 Pasos manuales (una sola vez): (1) Depuración USB en el teléfono + "Permitir siempre" en el
 diálogo al conectar; (2) aceptar el permiso de Accesibilidad para "Python" en el Mac.
 
-**Actualizar:** no hay que hacer nada — cada 6 h el agent de update revisa GitHub y, si hay
-versión nueva, la instala solo (nunca toca nada si no hay cambios). Forzarla ya:
+**Actualizar:** no hay que hacer nada — se revisa GitHub en dos momentos: (a) **al conectar el
+teléfono** (v1.12.0: el watcher hace un `git fetch` con tope de 10 s; si hay versión nueva,
+dispara el agent de update y la sesión abre ya actualizada) y (b) cada 6 h con el agent de
+update. Nunca toca nada si no hay cambios. Forzarla a mano:
 ```bash
 cd ~/EspejoAndroid && ./update.sh
 ```
@@ -79,7 +82,7 @@ repo, commit + push; el Mac de la novia lo toma solo en ≤6 h.
 | Scripts vivos (los que corren) | `~/bin/scrcpy-autostart.sh`, `~/bin/android-buttons.py`, `~/bin/lidguard.sh`, `~/bin/android-menubar.py` |
 | LaunchAgents | `~/Library/LaunchAgents/com.stevenson.scrcpy-auto.plist`, `com.stevenson.espejo-update.plist` y `com.stevenson.espejo-menubar.plist` |
 | Teléfono memorizado para WiFi | `~/.espejo-wifi` ("IP SERIAL", lo escribe el watcher en cada sesión USB) |
-| Preferencias de ESTE Mac | `~/.espejo-config` (`TABLET_DEFAULT=1` = modo tablet al conectar; lo maneja el check del menú 📱) |
+| Preferencias de ESTE Mac | `~/.espejo-config` (`TABLET_DEFAULT=1` = modo tablet al conectar, lo maneja el check del menú 📱; `REPO=…` = ruta del repo, la escribe `install.sh` y la usa el watcher para chequear updates al conectar) |
 | Log del icono de menús | `/tmp/android-menubar.log` |
 | Log del watcher | `~/Library/Logs/scrcpy-auto.log` (+ `.out.log` / `.err.log`) |
 | Log de la barra | `/tmp/android-buttons.log` (debe decir `drag-tap: OK`) |
@@ -230,7 +233,7 @@ adb connect $(awk '{print $1}' ~/.espejo-wifi):5555   # conexión WiFi a mano
 | `bin/android-menubar.py` | Icono de barra de menús: conectar/desconectar espejo por WiFi (`adb connect` a `~/.espejo-wifi` + fallback mDNS) |
 | `install.sh` | Instalador idempotente (brew, pips, copia a `~/bin`, ambos LaunchAgents) |
 | `update.sh` | `git pull --ff-only` + `./install.sh` (manual) |
-| `autoupdate.sh` | Lo corre el agent cada 6 h: fetch; si hay commits → pull + install con `ESPEJO_AUTOUPDATE=1` |
+| `autoupdate.sh` | Lo corre el agent cada 6 h (y el watcher lo dispara al conectar el teléfono vía `launchctl kickstart`): fetch; si hay commits → pull + install con `ESPEJO_AUTOUPDATE=1` |
 | `launchagent/*.plist.template` | Templates con `__HOME__` / `__REPO__` que install.sh materializa |
 | `VERSION` | Versión mostrada por el instalador (bump en cada release) |
 | `OPERACION.md` | Este documento (copia espejo en Obsidian) |
@@ -240,7 +243,8 @@ adb connect $(awk '{print $1}' ~/.espejo-wifi):5555   # conexión WiFi a mano
 2. Probar: barra → `pkill -f android-buttons.py` (renace en ~2-10 s); watcher →
    `launchctl unload+load` del plist.
 3. Sincronizar: `cp ~/bin/<script> ~/EspejoAndroid/bin/` + bump `VERSION`.
-4. `git commit` + `git push` → el Mac de la novia se actualiza solo en ≤6 h.
+4. `git commit` + `git push` → el Mac de la novia se actualiza solo: en cuanto conecte el
+   teléfono (chequeo del watcher) o a más tardar en 6 h (agent de update).
 5. Si cambió operación/infra: actualizar este `OPERACION.md` **y** su copia en Obsidian
    (`~/Documents/ClientesSyncMacDT/ProyectosClaude/Espejo Android - Operación.md`).
 
@@ -260,6 +264,11 @@ adb connect $(awk '{print $1}' ~/.espejo-wifi):5555   # conexión WiFi a mano
   castiga el ~1 frame inherente del window server y da falsos "sigue lento".
 - `install.sh` NO debe recargar el agent de update cuando lo invoca `autoupdate.sh` (se mataría a
   sí mismo): eso lo controla la variable `ESPEJO_AUTOUPDATE=1`.
+- El chequeo de update al conectar (`maybe_update` en el watcher) NUNCA debe correr
+  `autoupdate.sh`/`install.sh` como hijo suyo: el `launchctl unload` del instalador mataría al
+  watcher Y al instalador a mitad de camino, dejando el agent sin recargar. Por eso delega en el
+  agent de update con `launchctl kickstart gui/$UID/com.stevenson.espejo-update` (job
+  independiente) y se limita a esperar a que el instalador lo reinicie.
 - Verificaciones en Bash: `pkill` + `pgrep` inmediato da falsos muertos (el watcher tarda hasta
   ~10 s en revivir la barra); y un pipeline que termina en grep/pgrep sin matches sale con código
   144/1 — benigno.

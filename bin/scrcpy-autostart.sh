@@ -93,6 +93,13 @@ maybe_update() {
   kill "$WD" 2>/dev/null
   remote=$(git -C "$repo" rev-parse '@{u}' 2>/dev/null) || return 0
   [ "$(git -C "$repo" rev-parse @)" = "$remote" ] && return 0
+  # si ESTA misma versión ya se intentó y falló (p. ej. pull abortado por
+  # cambios locales), no reintentar: evita esperar 90 s en cada conexión
+  if [ "$(cat /tmp/espejo-update-attempt 2>/dev/null)" = "$remote" ]; then
+    log "update a ${remote:0:7} ya falló antes -> sigo sin reintentar"
+    return 0
+  fi
+  echo "$remote" >/tmp/espejo-update-attempt
   log "versión nueva detectada -> actualizando antes de abrir el espejo"
   launchctl kickstart "gui/$(id -u)/com.stevenson.espejo-update" 2>/dev/null || return 0
   waited=0; pulled=0

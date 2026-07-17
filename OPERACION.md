@@ -4,7 +4,7 @@ Conectas cualquier Android por USB al Mac y su pantalla aparece sola, con una ba
 nativa al lado; al desconectar, todo se cierra solo. En plegables (Razr) funciona incluso con la
 tapa cerrada. Además: **modo WiFi bajo demanda** desde un icono 📱 en la barra de menús (el USB
 sigue siendo automático). Repo público: **https://github.com/stevensonramirez/espejo-android**
-(v1.12.0, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
+(v1.12.1, jul-2026). Instalado en: MacBook de Stevenson (`stevenson.ramirez`) y MacBook Pro de la
 novia.
 
 ## 📑 Índice
@@ -194,7 +194,7 @@ resetea la tapa ANTES de cortar, así el cover revive al instante).
 | La barra sigue "a saltos" | El tap murió y quedó solo el polling | `pkill -f android-buttons.py` (renace con tap); confirmar `drag-tap: OK` |
 | Apps se ven apeñuzcadas al rotar | Quedó `fixed-to-user-rotation enabled` de pruebas viejas | `adb shell wm fixed-to-user-rotation default` (el botón ⟳ ya lo auto-sana) |
 | El teléfono quedó con resolución rara en la mano | Modo tablet no se deshizo (falla múltiple) | `adb shell "wm size reset; wm density reset"` (lidguard y el watcher lo hacen solos normalmente) |
-| La novia no recibe una mejora | Auto-update aún no corre (cada 6 h) | `cd ~/EspejoAndroid && ./update.sh`; ver `~/Library/Logs/espejo-update.log` |
+| La novia no recibe una mejora | Auto-update aún no corre, o el pull aborta por "cambios locales" (pasó: chmod del instalador sobre un archivo subido sin +x en v1.1.0 → clon atascado en silencio; desde v1.12.1 sale notificación) | `cd ~/EspejoAndroid && git checkout -- . && ./update.sh` (SIN sudo/root); ver `~/Library/Logs/espejo-update.log` |
 | Todo raro tras editar el watcher | El watcher viejo sigue en memoria | `launchctl unload` + `load` del plist (sección 4) |
 | "Conectar por WiFi" no encuentra el teléfono | Otra red / IP nueva / teléfono reiniciado | Mismo WiFi ambos; si reinició, conectar por cable una vez (re-arma solo) |
 | No aparece el icono 📱 en la barra de menús | El agent del menú no corre | `launchctl load ~/Library/LaunchAgents/com.stevenson.espejo-menubar.plist`; ver `/tmp/android-menubar.log` |
@@ -264,6 +264,10 @@ adb connect $(awk '{print $1}' ~/.espejo-wifi):5555   # conexión WiFi a mano
   castiga el ~1 frame inherente del window server y da falsos "sigue lento".
 - `install.sh` NO debe recargar el agent de update cuando lo invoca `autoupdate.sh` (se mataría a
   sí mismo): eso lo controla la variable `ESPEJO_AUTOUPDATE=1`.
+- Scripts nuevos en la raíz del repo: commitearlos **con `+x`** (`chmod +x` antes del add). Un
+  archivo subido 644 + el `chmod` del instalador = clon "sucio" en los otros Macs → todos los
+  pulls abortan en silencio (pasó con `autoupdate.sh` v1.1.0 → el Mac de la novia quedó semanas
+  en versión vieja). Y las actualizaciones NUNCA con sudo/root (deja `.git` con dueño root).
 - El chequeo de update al conectar (`maybe_update` en el watcher) NUNCA debe correr
   `autoupdate.sh`/`install.sh` como hijo suyo: el `launchctl unload` del instalador mataría al
   watcher Y al instalador a mitad de camino, dejando el agent sin recargar. Por eso delega en el
